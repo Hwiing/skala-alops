@@ -23,7 +23,7 @@ CSV 업로드 최소 41행은 시뮬레이션 21건 확보 기준이며 충분�
 | Method | URL | 요청 / 응답 | 뼈대 상태 |
 |---|---|---|---|
 | GET | `/` | 원본 기반 대시보드 | 동작 |
-| GET | `/health` | `status`, `model_loaded`, `loading_mode` | 프로세스 상태; 모델 readiness는 별도 확인 |
+| GET | `/health` | `status`, `model_loaded`, `model_version`, `model_source`, `loading_mode` | `status`는 프로세스 생존; readiness는 `model_loaded` (lazy는 첫 예측 전 false) |
 | POST | `/data/upload` | multipart CSV → `filename`, `rows` | 검증·저장, 오류 400 |
 | GET | `/data/status` | 데이터 기간·행 수·`min_price`·`max_price` | 데이터 없으면 `exists:false` |
 | POST | `/predict` | `sequence` → `predicted_price`, `model_version` | 모델 필요, 입력 422, 미준비 503 |
