@@ -51,6 +51,20 @@ def test_crude_uses_previous_trading_day_only(tmp_path):
     assert asof_values(days, crude, lag_days=1) == [77.0, 76.0, 76.0, 76.0, 78.0]
 
 
+def test_singapore_holiday_blank_is_skipped_not_zero(tmp_path):
+    # 실제 원본: 싱가포르 공휴일(예: 23년11월13일 디파발리)에는 Dubai 값이 비어 있다
+    text = "기간,Dubai\r\n23년11월10일,79.00\r\n23년11월13일,\r\n23년11월14일,81.00\r\n"
+    crude = load_opinet_crude(write(tmp_path, "crude.csv", text))
+    assert crude == [(D("2023-11-10"), 79.0), (D("2023-11-14"), 81.0)]
+    assert asof_values([D("2023-11-14")], crude, lag_days=1) == [79.0]
+
+
+def test_rejects_crude_saved_in_won_per_liter(tmp_path):
+    text = "기간,Dubai\r\n23년09월28일,818.38\r\n23년09월29일,812.88\r\n"
+    with pytest.raises(ValueError, match=r"`\$`"):
+        load_opinet_crude(write(tmp_path, "crude.csv", text))
+
+
 def test_fx_uses_same_day_and_carries_weekend_forward(tmp_path):
     fx = load_usd_krw(write(tmp_path, "fx.csv", FX_CSV, "utf-8"))
     days = [D("2023-01-06"), D("2023-01-07"), D("2023-01-08"), D("2023-01-09")]
@@ -78,19 +92,35 @@ def test_rejects_stale_or_missing_history():
     [
         ("2021-11-11", 0.0),
         ("2021-11-12", 20.0),
-        ("2022-05-01", 30.0),
-        ("2022-07-01", 37.0),
-        ("2022-12-31", 37.0),
+        ("2022-07-01", 37.1),
         ("2023-01-01", 25.0),
+        ("2024-06-30", 25.0),
+        ("2024-07-01", 20.0),
+        ("2024-11-01", 14.9),
+        ("2025-05-01", 10.0),
+        ("2025-11-01", 7.0),
+        ("2026-03-31", 7.0),
+        ("2026-04-01", 14.9),
+        ("2026-11-30", 14.9),
     ],
 )
 def test_tax_cut_rate_boundaries(day, rate):
     assert tax_cut_rates([D(day)], load_tax_policy()) == [rate]
 
 
+def test_tax_cut_rate_matches_statutory_won_per_liter():
+    # 인하율 = 1 - 탄력세율 / 기본 529원/L (시행령 개정이유의 원/L 값에서 계산)
+    import csv
+
+    with open("data/reference/gasoline_fuel_tax_cut.csv", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            expected = round((1 - float(row["flexible_tax_krw_per_l"]) / 529) * 100, 1)
+            assert float(row["cut_rate_pct"]) == expected, row["start_date"]
+
+
 def test_tax_rate_outside_verified_table_is_an_error():
     with pytest.raises(ValueError, match="유류세"):
-        tax_cut_rates([D("2024-01-01")], load_tax_policy())
+        tax_cut_rates([D("2026-12-01")], load_tax_policy())
 
 
 def test_tax_table_must_be_contiguous(tmp_path):

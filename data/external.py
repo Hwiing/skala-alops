@@ -24,14 +24,27 @@ FX_LAG_DAYS = 0
 # 설·추석 연휴에도 국제유가·환율 공백은 일주일을 넘지 않는다. 넘으면 원본 누락으로 본다.
 MAX_STALE_DAYS = 7
 TAX_POLICY_PATH = "data/reference/gasoline_fuel_tax_cut.csv"
+# 두바이유는 역대 최고가도 USD 150 안팎이다. 이보다 훨씬 크면 오피넷 화면의 `원` 단위(원/L)로
+# 저장된 파일이므로 단위를 섞지 않도록 거부한다.
+MAX_CRUDE_USD_PER_BBL = 300
 
 
 def load_opinet_crude(path: str, column: str = CRUDE_COLUMN) -> list[tuple[date, float]]:
-    """오피넷 '유가관련정보 > 국제유가 > 원유' CSV저장($ 단위) -> [(날짜, USD/bbl)]."""
-    series = parse_series(read_csv_text(path), "기간", column)
+    """오피넷 '유가관련정보 > 국제유가 > 원유' CSV저장($ 단위) -> [(날짜, USD/bbl)].
+
+    두바이 현물은 싱가포르 시장 기준이라 싱가포르 공휴일에는 값이 비어 있다.
+    빈 값은 '그날 관측 없음'으로 보고 건너뛰며, as-of 병합에서 직전 관측값이 쓰인다.
+    """
+    rows = [row for row in read_csv_text(path) if str(row.get(column) or "").strip()]
+    series = parse_series(rows, "기간", column)
     for day, price in series:
         if price <= 0:
             raise ValueError(f"{day} 국제유가가 양수가 아닙니다: {price}")
+        if price > MAX_CRUDE_USD_PER_BBL:
+            raise ValueError(
+                f"{day} 국제유가 {price}는 USD/bbl로 보기 어렵습니다. "
+                "오피넷 화면의 단위를 `$`로 두고 다시 저장하세요 (`원`은 원/L)"
+            )
     return series
 
 
