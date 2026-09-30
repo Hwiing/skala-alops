@@ -1,0 +1,11 @@
+# 단일 컨테이너. 기본 뼈대는 lazy/local; 모델 학습과 MLflow TODO 완료 후 전환.
+services:
+  serving-app:
+    build:
+      context: ..
+      dockerfile: serving_app/Dockerfile
+    ports: ["8000:8000"]
+    environment:
+      MODEL_SOURCE: ${MODEL_SOURCE:-local}
+      LOADING_MODE: ${LOADING_MODE:-lazy}
+      MLFLOW_TRACKING_URI: sqlite:///mlflow.db
