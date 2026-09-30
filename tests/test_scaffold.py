@@ -133,9 +133,9 @@ def _bad_uploads():
     rows = list(csv.DictReader(io.StringIO(SAMPLE.read_text())))
     fields = list(rows[0].keys())
     negative = [dict(r) for r in rows]
-    negative[5]["usd_krw"] = "-1"
+    negative[5]["gasoline_price"] = "-1"
     return {
-        "missing_column": _csv(rows, [f for f in fields if f != "usd_krw"]).encode(),
+        "missing_column": _csv(rows, [f for f in fields if f != "gasoline_price"]).encode(),
         "too_few_rows": _csv(rows[:40], fields).encode(),
         "non_positive": _csv(negative, fields).encode(),
         "not_utf8": _csv(rows, fields).encode("utf-16"),
