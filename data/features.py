@@ -26,6 +26,9 @@ def validate_rows(rows: list[dict]) -> list[dict]:
     result = []
     previous = None
     for row in rows:
+        missing = [key for key in ("date", *FEATURE_COLUMNS) if row.get(key) in (None, "")]
+        if missing:
+            raise ValueError(f"필수 값이 비어 있습니다: {missing} (행: {row.get('date')})")
         day = date.fromisoformat(row["date"])
         if previous is not None and day != previous + timedelta(days=1):
             raise ValueError("date는 중복/누락 없이 하루 간격 오름차순이어야 합니다")
@@ -103,3 +106,33 @@ def train_test_split(X: list, y: list, test_ratio: float = 0.2):
     if not 0 < split_idx < len(X):
         raise ValueError("학습/검증 시퀀스가 모두 필요합니다")
     return X[:split_idx], y[:split_idx], X[split_idx:], y[split_idx:]
+
+
+def scaler_fit_rows(rows: list[dict], test_ratio: float = 0.2, seq_len: int = SEQ_LEN):
+    """train_test_split의 학습 시퀀스가 쓰는 행(입력 + 타깃)만 반환한다.
+
+    검증 구간의 타깃 가격이 scaler의 min/max에 섞이면 미래 정보가 학습에 새므로,
+    scaler는 이 행들로만 fit한다. (scripts/train_baseline_v1.py와 같은 경계)
+    """
+    split_idx = int((len(rows) - seq_len) * (1 - test_ratio))
+    if not 0 < split_idx < len(rows) - seq_len:
+        raise ValueError("학습/검증 시퀀스가 모두 필요합니다")
+    return rows[: seq_len + split_idx]
+
+
+def split_recent_for_finetune(
+    rows: list[dict], train_days: int = 30, val_days: int = 7, seq_len: int = SEQ_LEN
+):
+    """최근 데이터 fine-tuning용 (학습 행, 검증 행) 제안안.
+
+    - 검증: 가장 최근 val_days일을 타깃으로 하는 행 (선행 seq_len일 입력 포함)
+    - 학습: 그 직전 train_days일을 타깃으로 하는 행 (선행 seq_len일 입력 포함)
+    두 구간의 입력 문맥은 겹칠 수 있지만 **타깃 날짜는 겹치지 않아** 학습에 쓴 정답으로
+    게이트를 재검증하지 않는다. 검증 일수(최소 표본)는 모델 담당이 확정한다.
+    """
+    if train_days < 1 or val_days < 1:
+        raise ValueError("train_days와 val_days는 1 이상이어야 합니다")
+    needed = seq_len + train_days + val_days
+    if len(rows) < needed:
+        raise ValueError(f"fine-tuning에 최소 {needed}행이 필요합니다 (현재 {len(rows)}행)")
+    return rows[-needed:-val_days], rows[-(seq_len + val_days) :]
