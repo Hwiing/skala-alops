@@ -29,13 +29,18 @@ import argparse
 import csv
 import json
 import math
+import os
 import random
+import sys
 import urllib.error
 import urllib.request
 from datetime import date, timedelta
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data.contracts import BATCH_MIN_ROWS  # noqa: E402
+
 API_URL = "http://localhost:8000/predict/batch-test"
-BATCH_N = 175
+BATCH_N = BATCH_MIN_ROWS  # 175
 SHOCK_DAY = 125
 L_PER_BBL = 158.987
 FULL_TAX_WON = 528.75  # 경유 유류세(인하 전, 원/L) - 인하율 1%p ≈ 5.3원/L
@@ -189,17 +194,26 @@ def send_batch(rows: list[dict], label: str, url: str = API_URL, timeout: float 
 
 
 def summarize(result: dict, inputs: str) -> dict:
+    """응답 DriftCheck(공개 계약)를 결과표 한 줄로. 판정은 상태에서 거꾸로 읽는다."""
     check = result.get("drift_check") or {}
-    det = check.get("detection") or {}
+    status = check.get("status")
+    if status == "ok":
+        detection = "ok"
+    elif status == "insufficient_data" and check.get("drift_rmse") is None:
+        detection = "보류"
+    elif status:
+        detection = "drift"
+    else:
+        detection = "-"
     reload = check.get("reload") or {}
     return {
         "scenario": result["label"],
         "inputs": inputs,
         "http": result.get("http_status"),
-        "detection": det.get("status", "-"),
-        "week1_rmse": det.get("week1_rmse"),
-        "naive_rmse": det.get("naive_rmse"),
-        "action": check.get("status") or result.get("error", "-"),
+        "detection": detection,
+        "week1_rmse": check.get("drift_rmse"),
+        "naive_rmse": check.get("drift_naive_rmse"),
+        "action": status or result.get("error", "-"),
         "version": check.get("version") or "-",
         "reload": reload.get("version") if reload.get("reloaded") else ("실패" if reload else "-"),
     }

@@ -34,30 +34,26 @@ ALERT_STATUSES = {
     "gate_failed": "WARN",
     "no_production": "ERROR",
     "retrain_failed": "ERROR",
-    "insufficient_data": "ERROR",  # 재학습 단계의 데이터 부족 (error 필드가 있을 때만)
+    "insufficient_data": "ERROR",  # 재학습 단계의 데이터 부족 (627행 미만)
 }
 
 
 def build_alert(result: dict) -> dict | None:
-    """retrain_trigger 결과 → 알림 dict. 보낼 필요가 없으면 None."""
+    """retrain_trigger 결과(DriftCheck + 내부 detection) → 알림 dict. 보낼 필요가 없으면 None.
+
+    재학습을 실제로 시도한 결과만 보낸다. retrain_trigger는 그때만 notifier를 부른다.
+    """
     status = result.get("status")
-    if status not in ALERT_STATUSES:
-        return None
-    if status == "insufficient_data" and "error" not in result:
-        return None  # 판정 단계의 표본 부족(정상적인 보류)은 알리지 않는다
     det = result.get("detection") or {}
+    if status not in ALERT_STATUSES or det.get("status") != "drift":
+        return None  # ok·판정 보류는 알리지 않는다
     week1, naive = det.get("week1_rmse"), det.get("naive_rmse")
-    cause = (
-        f"1주차 RMSE {week1:.2f} > 같은 기간 naive RMSE {naive:.2f}"
-        if week1 is not None and naive is not None
-        else "판정 정보 없음"
-    )
+    cause = f"1주차 RMSE {week1:.2f} > 같은 기간 naive RMSE {naive:.2f}"
+    reasons = [r for r in result.get("reasons") or [] if not r.startswith("탐지:")]
     if status == "promoted":
         action = f"새 모델 v{result.get('version')} 승격 (서빙 교체는 batch_test reload 결과 확인)"
-    elif status == "gate_failed":
-        action = "게이트 탈락, 기존 Production 유지: " + "; ".join(result.get("reasons") or [])
     else:
-        action = f"재학습 안 됨, 기존 Production 유지: {result.get('error') or status}"
+        action = "기존 Production 유지: " + ("; ".join(reasons) or status)
     return {
         "time": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
         "level": ALERT_STATUSES[status],

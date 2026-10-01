@@ -80,11 +80,12 @@ def test_routine_statuses_are_not_alerted(status):
 
 
 def test_detection_hold_is_not_alerted_but_training_data_shortage_is():
-    assert nt.build_alert({"status": "insufficient_data", "detection": {}}) is None
-    alert = nt.build_alert(
-        {"status": "insufficient_data", "error": "627행 필요", "detection": DETECTION}
-    )
+    hold = {"status": "insufficient_data", "detection": {"status": "insufficient_data"}}
+    assert nt.build_alert(hold) is None  # 판정 보류(짝 부족)는 정상적인 대기
+    shortage = result("insufficient_data", reasons=["탐지: ...", "재학습 데이터 부족: 627행 필요"])
+    alert = nt.build_alert(shortage)
     assert alert["level"] == "ERROR" and "627행" in alert["action"]
+    assert "탐지:" not in alert["action"]  # 원인은 cause 필드에 따로
 
 
 def test_alert_contains_time_cause_rmse_threshold_version():
@@ -135,7 +136,9 @@ def test_unreachable_webhook_does_not_raise(caplog):
 
 def test_log_adapter_writes_alert_line(caplog):
     with caplog.at_level(logging.INFO, logger="aiops"):
-        nt.OperatorNotifier([nt.LogAdapter()]).notify(result("retrain_failed", error="boom"))
+        nt.OperatorNotifier([nt.LogAdapter()]).notify(
+            result("retrain_failed", reasons=["재학습 실패: boom"])
+        )
     assert "[ALERT] [AIOps ERROR] retrain_failed" in caplog.text
 
 
@@ -148,7 +151,7 @@ def test_same_alert_is_suppressed_within_window():
     n = nt.OperatorNotifier([rec], dedup_seconds=3600, clock=lambda: now[0])
     assert n.notify(result("gate_failed"))["sent"]
     assert n.notify(result("gate_failed")) == {"sent": False, "reason": "duplicate"}
-    assert n.notify(result("retrain_failed", error="x"))["sent"]  # 다른 상태는 따로 보냄
+    assert n.notify(result("retrain_failed", reasons=["x"]))["sent"]  # 다른 상태는 따로 보냄
     now[0] += 3601
     assert n.notify(result("gate_failed"))["sent"]  # 억제 시간이 지나면 다시 보냄
     assert len(rec.alerts) == 3
@@ -175,7 +178,15 @@ def test_retrain_trigger_sends_alert_through_notifier(monkeypatch):
     monkeypatch.setattr(rt, "notifier", nt.OperatorNotifier([rec]).notify)
     monkeypatch.setattr(rt, "_load_recent_rows", lambda: [{"date": "a"}, {"date": "b"}])
     monkeypatch.setattr(
-        rt, "_fine_tune", lambda rows: {"promoted": True, "status": "promoted", "version": "9"}
+        rt,
+        "_fine_tune",
+        lambda rows: {
+            "promoted": True,
+            "status": "promoted",
+            "version": "9",
+            "rmse": [1.0] * 4,
+            "naive_rmse": [2.0] * 4,
+        },
     )
     rt.check_and_trigger(make_pairs(28, model_err=60, naive_err=35, version="3"))
     rt.reset_state()

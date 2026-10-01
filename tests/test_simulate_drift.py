@@ -114,7 +114,8 @@ def test_summary_table():
             "status": "promoted",
             "version": "4",
             "reload": {"reloaded": True, "version": "champion:4"},
-            "detection": {"status": "drift", "week1_rmse": 76.0, "naive_rmse": 4.0},
+            "drift_rmse": 76.0,
+            "drift_naive_rmse": 4.0,
         },
     }
     s = sd.summarize(result, "소매 +280원")

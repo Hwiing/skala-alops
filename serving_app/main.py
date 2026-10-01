@@ -33,7 +33,7 @@ if not _aiops_logger.handlers:
     _aiops_logger.addHandler(_handler)
     _aiops_logger.addHandler(logging.StreamHandler())  # 터미널에서도 동일하게 확인 가능
 
-app = FastAPI(title="휘발유 Serving & AIOps")
+app = FastAPI(title="경유 주간 예측 Serving & AIOps")
 
 app.include_router(predict.router)
 app.include_router(health.router)
