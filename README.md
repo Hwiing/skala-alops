@@ -64,8 +64,8 @@ make docker
 # docker build --build-arg TRAIN_ON_BUILD=1 -f serving_app/Dockerfile -t gasoline-serving .
 ```
 
-기본 이미지는 모델 없는 lazy/local 상태로 시작합니다. MLflow 로더가 미구현이므로
-Production/eager 전환과 영속 볼륨 구성은 서빙 담당 이슈에서 완료합니다.
+기본 이미지는 모델 없는 lazy/local 상태로 시작합니다(`/predict` 503).
+볼륨·컨테이너 안 학습·MLflow 전환은 [공통 계약 - Docker 실행·영속화](docs/contracts.md#docker-실행영속화)를 참고하세요.
 
 ## 구조와 역할
 

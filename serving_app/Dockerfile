@@ -13,12 +13,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY serving_app/ serving_app/
 COPY data/ data/
 COPY scripts/ scripts/
-ENV MLFLOW_TRACKING_URI=sqlite:///mlflow.db
+ENV MLFLOW_TRACKING_URI=sqlite:////app/runtime/mlflow.db
 
 # 원본 seed → baseline → MLflow 등록 흐름은 유지하되 담당자 TODO 완료 후 선택 실행.
 # 합성 데이터로 자동 학습/Production 승격하지 않는 뼈대 기본값.
 ARG TRAIN_ON_BUILD=0
-RUN mkdir -p data/uploads serving_app/models \
+RUN mkdir -p data/uploads serving_app/models runtime logs mlruns \
  && if [ "$TRAIN_ON_BUILD" = "1" ]; then \
       cp data/sample_gasoline_prices.csv data/uploads/build_seed.csv && \
       python scripts/train_baseline_v1.py && \

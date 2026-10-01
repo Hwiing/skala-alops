@@ -51,3 +51,26 @@ CSV 업로드 최소 41행은 시뮬레이션 21건 확보 기준이며 충분�
 - 감지 → `[WARN]` → `[INFO] retrain triggered` → 게이트 재검증 → 성공 시 `[OK]`와 실제 버전. 실패 시 기존 Production 유지.
 - 중복 트리거 방지, 실패 로그, 성공 후 모델 캐시 교체와 예측 윈도우 초기화는 AIOps·서빙 공동 완료 항목입니다.
 - 알림은 `logs/aiops.log [WARN]` + 운영자 알림이 필수입니다. 운영자 알림 채널(예: 웹훅/메일)과 수신 대상은 AIOps 담당이 확정하고 설정 가능한 어댑터로 구현합니다. 전송 실패 로그와 중복 억제를 검증합니다. 현재 운영자 전송은 미구현입니다.
+
+## Docker 실행·영속화
+
+단일 컨테이너(`serving_app/docker-compose.yml`, 포트 8000). 런타임 데이터는 이름 있는 볼륨에 둡니다.
+
+| 볼륨 | 컨테이너 경로 | 내용 |
+|---|---|---|
+| `uploads` | `/app/data/uploads` | 업로드 CSV (학습은 최신 파일 사용) |
+| `models` | `/app/serving_app/models` | 로컬 모델 `.keras`, `scaler.pkl` |
+| `logs` | `/app/logs` | `aiops.log` |
+| `mlflow-db` | `/app/runtime` | `mlflow.db` (`MLFLOW_TRACKING_URI=sqlite:////app/runtime/mlflow.db`) |
+| `mlruns` | `/app/mlruns` | MLflow 아티팩트(등록 모델 가중치) |
+
+- `restart`·`down`·재빌드 후에도 유지되고, `down -v`로만 삭제됩니다. `restart: unless-stopped`.
+- 호스트의 `mlflow.db`·`mlruns`는 공유하지 않습니다. 아티팩트 경로가 호스트 절대경로로 기록되어 컨테이너에서 찾을 수 없으므로 컨테이너 안에서 학습·등록합니다.
+- 모델이 없으면 서버는 뜨고 `/predict`만 503입니다(기본 lazy). eager는 시작 시 로드 실패가 바로 드러나지만, 모델이 준비된 뒤 전환합니다.
+
+```bash
+make docker                                   # 빌드 + 실행 (lazy/local)
+docker compose -f serving_app/docker-compose.yml exec serving-app python scripts/train_baseline_v1.py      # local 모델
+docker compose -f serving_app/docker-compose.yml exec serving-app python serving_app/train_and_register.py # MLflow 등록
+MODEL_SOURCE=mlflow docker compose -f serving_app/docker-compose.yml up -d    # MLflow Production 서빙
+```
