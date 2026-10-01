@@ -72,11 +72,15 @@ def _load_from_mlflow() -> LoadedModel:
     응답의 버전과 실제 가중치가 어긋날 수 있다. 스케일러는 항상 로컬 파일에서 읽는다.
     """
     import mlflow
+    from mlflow.exceptions import MlflowException
     from mlflow.tensorflow import load_model
     from mlflow.tracking import MlflowClient
 
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db"))
-    versions = MlflowClient().get_latest_versions(MODEL_NAME, ["Production"])
+    try:
+        versions = MlflowClient().get_latest_versions(MODEL_NAME, ["Production"])
+    except MlflowException as exc:  # 등록된 모델 이름이 아직 없는 새 레지스트리 등
+        raise FileNotFoundError(f"{MODEL_NAME}을 레지스트리에서 찾을 수 없습니다") from exc
     if not versions:
         raise FileNotFoundError(f"{MODEL_NAME}에 Production 버전이 없습니다")
     version = versions[0].version

@@ -14,12 +14,16 @@ from serving_app import model_loader
 @pytest.fixture
 def registry(monkeypatch):
     """state["production"]이 현재 Production 버전 번호(없으면 None)인 가짜 레지스트리."""
-    state = {"production": "3", "loaded_uris": [], "fail_load": False}
+    state = {"production": "3", "loaded_uris": [], "fail_load": False, "unregistered": False}
 
     class FakeClient:
         def get_latest_versions(self, name, stages):
             assert name == "GasolinePricePredictor"
             assert stages == ["Production"]
+            if state["unregistered"]:
+                from mlflow.exceptions import MlflowException
+
+                raise MlflowException(f"Registered Model with name={name} not found")
             v = state["production"]
             return [SimpleNamespace(version=v)] if v else []
 
@@ -45,6 +49,13 @@ def test_mlflow_loads_resolved_production_version(registry):
 
 def test_mlflow_without_production_raises_file_not_found(registry):
     registry["production"] = None
+    with pytest.raises(FileNotFoundError):
+        model_loader._load_from_mlflow()
+
+
+def test_mlflow_unregistered_model_raises_file_not_found(registry):
+    """새 mlflow.db처럼 모델 이름이 아예 없을 때도 /predict가 503이 되도록 한다."""
+    registry["unregistered"] = True
     with pytest.raises(FileNotFoundError):
         model_loader._load_from_mlflow()
 
