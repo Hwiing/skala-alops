@@ -85,12 +85,12 @@ def test_uses_only_latest_window():
 
 def test_insufficient_samples_holds_judgement():
     result = evaluate(make_pairs(WINDOW_SIZE - 1, model_err=500, naive_err=1))
-    assert result["status"] == "insufficient"
+    assert result["status"] == "insufficient_data"
     assert result["n"] == WINDOW_SIZE - 1 and result["week1_rmse"] is None
 
 
 def test_empty_input_is_insufficient():
-    assert evaluate([])["status"] == "insufficient"
+    assert evaluate([])["status"] == "insufficient_data"
 
 
 def test_pending_actuals_are_excluded_and_counted():
@@ -98,7 +98,7 @@ def test_pending_actuals_are_excluded_and_counted():
     for p in pairs[-3:]:
         p["actual"] = [None, None, None, None]  # 아직 정답 미도착
     result = evaluate(pairs)
-    assert result["status"] == "insufficient"
+    assert result["status"] == "insufficient_data"
     assert result["n"] == WINDOW_SIZE - 3 and result["pending"] == 3
 
 
@@ -110,7 +110,7 @@ def test_only_latest_model_version_is_judged():
     new_model = make_pairs(5, 10, 35, version="2", start=date(2026, 7, 1))
     result = evaluate(old_model + new_model)
     # 이전 모델의 큰 오차로 새 모델(v2)을 drift로 판정하면 안 된다
-    assert result["status"] == "insufficient"
+    assert result["status"] == "insufficient_data"
     assert result["model_version"] == "2" and result["n"] == 5
 
 

@@ -21,7 +21,7 @@ AIOps 1/3 (#15): 예측·실제값 짝으로 성능 저하(드리프트)를 판�
 반환 status:
     "ok"           - 판정 완료, 정상
     "drift"        - 판정 완료, 성능 저하 → retrain_trigger가 재학습 여부를 결정
-    "insufficient" - 정답이 확보된 짝이 WINDOW_SIZE 미만 → 판정 보류
+    "insufficient_data" - 정답이 확보된 짝이 WINDOW_SIZE 미만 → 판정 보류
     "invalid"      - 잘못된 값(NaN·inf·형식 오류) → 판정 거부 (조용히 넘어가지 않는다)
 """
 
@@ -90,7 +90,7 @@ def evaluate(pairs: list[dict]) -> dict:
     base = {"model_version": model_version, "window_size": WINDOW_SIZE, "pending": pending}
     if len(matured) < WINDOW_SIZE:
         return {
-            "status": "insufficient",
+            "status": "insufficient_data",
             "n": len(matured),
             "week1_rmse": None,
             "naive_rmse": None,
