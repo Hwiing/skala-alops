@@ -98,3 +98,21 @@ def test_windows_and_scaler_clip():
     extreme = [[v * 1000 for v in step] for step in X[0]]
     hi = scaler.transform([scaler.hi])[0]
     assert all(a <= b + 1e-9 for step in scaler.transform(extreme) for a, b in zip(step, hi))
+
+
+def test_finetune_split_has_no_target_overlap():
+    from data.diesel_features import FINETUNE_MIN_ROWS, split_finetune
+
+    frame = DailyFrame(make_rows(n=FINETUNE_MIN_ROWS))
+    train_idx, val_idx = split_finetune(frame)
+    assert len(train_idx) == 365 and len(val_idx) == 28
+    # 학습 마지막 날의 4주 평균 정답 구간이 검증 첫날 이전에 끝난다
+    assert train_idx[-1] + 7 * HORIZONS < val_idx[0]
+    assert frame.targets(val_idx[-1]) is not None
+
+
+def test_finetune_split_fails_explicitly_when_short():
+    from data.diesel_features import FINETUNE_MIN_ROWS, split_finetune
+
+    with pytest.raises(ValueError, match="insufficient_data"):
+        split_finetune(DailyFrame(make_rows(n=FINETUNE_MIN_ROWS - 1)))

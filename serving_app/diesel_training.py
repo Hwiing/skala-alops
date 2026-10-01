@@ -61,6 +61,25 @@ def fit(frame: DailyFrame, train_idx: list[int], seeds: list[int]) -> tuple[Dies
     return DieselForecaster(models, scaler), info
 
 
+def finetune(
+    forecaster: DieselForecaster, frame: DailyFrame, train_idx: list[int], epochs: int, lr: float
+) -> dict:
+    """Production 가중치에서 이어서 학습(warm start). scaler는 Production 것을 그대로 쓴다(재fit 금지)."""
+    from tensorflow import keras
+
+    _, X, Y, kept = to_arrays(frame, train_idx, forecaster.scaler)
+    for m in forecaster.models:
+        m.compile(optimizer=keras.optimizers.Adam(learning_rate=lr), loss="mse")
+        m.fit(X, Y, epochs=epochs, batch_size=64, verbose=0)
+    d = frame.dates
+    return {
+        "train_target_period": [d[kept[0]].isoformat(), d[kept[-1]].isoformat()],
+        "train_windows": len(kept),
+        "seeds": list(range(len(forecaster.models))),
+        "epochs": [epochs] * len(forecaster.models),
+    }
+
+
 def evaluate(forecaster: DieselForecaster, frame: DailyFrame, val_idx: list[int]) -> dict:
     """정책 규칙까지 적용한 1~4주 RMSE와 같은 날짜의 naive RMSE."""
     _, X, _, kept = to_arrays(frame, val_idx, forecaster.scaler)
