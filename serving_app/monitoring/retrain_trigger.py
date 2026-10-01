@@ -35,6 +35,7 @@ import time
 from collections.abc import Callable
 
 from data.contracts import FINETUNE_MIN_ROWS, MODEL_NAME
+from serving_app.monitoring import notifier as operator_notifier
 from serving_app.monitoring.drift_detector import WINDOW_SIZE, evaluate
 
 logger = logging.getLogger("aiops")
@@ -42,8 +43,9 @@ logger = logging.getLogger("aiops")
 DATA_CSV = os.getenv("DIESEL_DATA_CSV", "data/processed/diesel_features_2008_spliced.csv")
 RETRAIN_COOLDOWN_SECONDS = float(os.getenv("RETRAIN_COOLDOWN_SECONDS", "600"))
 
-# 운영자 알림 훅 (#16에서 로그·웹훅 어댑터를 연결). 결과 dict + "detection" 하나를 받는 함수.
-notifier: Callable[[dict], object] | None = None
+# 운영자 알림 훅: 결과 dict + "detection"을 받는 함수.
+# 기본은 환경변수로 구성한 OperatorNotifier(로그 + 선택적 웹훅, #16).
+notifier: Callable[[dict], object] | None = operator_notifier.from_env().notify
 
 _retrain_lock = threading.Lock()
 _results: dict[tuple, dict] = {}  # (모델 버전, 판정 시작일, 종료일) → 그 판정의 재학습 결과
