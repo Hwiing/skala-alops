@@ -26,6 +26,21 @@ PriceVector = Annotated[list[Price], Field(min_length=HORIZONS, max_length=HORIZ
 RmseVector = Annotated[list[Rmse], Field(min_length=HORIZONS, max_length=HORIZONS)]
 
 
+def _registry_version(value):
+    """MLflow의 정수 버전은 공개 계약의 문자열로 정규화한다."""
+    if type(value) is int:
+        if value <= 0:
+            raise ValueError("레지스트리 버전 번호는 양의 정수여야 합니다")
+        return str(value)
+    return value
+
+
+RegistryVersion = Annotated[
+    str,
+    BeforeValidator(_registry_version, json_schema_input_type=str | Annotated[int, Field(gt=0)]),
+]
+
+
 class ContractModel(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
@@ -126,12 +141,12 @@ class RetrainMetrics(ContractModel):
     rmse: RmseVector | None = None
     naive_rmse: RmseVector | None = None
     production_rmse: RmseVector | None = None
-    production_before: str | None = None
+    production_before: RegistryVersion | None = None
     passed: bool | None = None
     run_id: str | None = None
     reasons: list[str] = Field(default_factory=list)
     promoted: bool = False
-    version: str | None = None
+    version: RegistryVersion | None = None
 
     @model_validator(mode="after")
     def promotion_version(self):

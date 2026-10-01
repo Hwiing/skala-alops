@@ -193,11 +193,13 @@ def test_batch_resend_does_not_double_count_base_dates(batch):
     assert len(predict_router.recent_predictions) == 33  # 같은 기준일은 덮어씀
 
 
-def test_batch_promoted_reloads_promoted_version_and_clears_window(batch):
+@pytest.mark.parametrize("registry_version", ["2", 2])
+def test_batch_promoted_reloads_promoted_version_and_clears_window(batch, registry_version):
     batch.state["trigger"] = {
         "status": "promoted",
         "promoted": True,
-        "version": "2",
+        "version": registry_version,
+        "production_before": 1,
         "rmse": [1.0] * 4,
         "naive_rmse": [2.0] * 4,
     }
@@ -205,6 +207,8 @@ def test_batch_promoted_reloads_promoted_version_and_clears_window(batch):
     response = batch.post()
 
     assert response.status_code == 200
+    assert response.json()["drift_check"]["version"] == "2"
+    assert response.json()["drift_check"]["production_before"] == "1"
     assert response.json()["drift_check"]["reload"] == {"reloaded": True, "version": "champion:2"}
     assert batch.calls["reload"] == ["2"]
     assert len(predict_router.recent_predictions) == 0
