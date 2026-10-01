@@ -7,8 +7,8 @@
 | 컬럼 | 의미 | 검증 |
 |---|---|---|
 | `date` | 기준일, ISO 날짜 | 하루 간격 오름차순, 중복·누락 불가 |
-| `gasoline_price` | 전국 평균 보통휘발유 가격, 원/L | 양수 |
-| `crude_oil_price` | 두바이유 현물(오피넷), USD/barrel; D-1일까지 공개된 최근 거래일 값 | 양수 |
+| `diesel_price` | 전국 평균 보통휘발유 가격, 원/L | 양수 |
+| `singapore_diesel_price` | 두바이유 현물(오피넷), USD/barrel; D-1일까지 공개된 최근 거래일 값 | 양수 |
 | `usd_krw` | 원/미국달러 매매기준율(ECOS 731Y001), KRW/USD; D일까지 고시된 값 | 양수 |
 | `tax_or_supply_feature` | 휘발유 유류세 인하율 %, D일 시행값 (공급 차질은 피처 제외) | 유한 실수 |
 
@@ -35,7 +35,7 @@ CSV 업로드 최소 41행은 시뮬레이션 21건 확보 기준이며 충분�
 
 전체 예측 요청 예시는 [`examples/predict.json`](../examples/predict.json).
 배치의 `rows`는 DailyPoint 전체 피처를 포함합니다. 원본 `prices` 전용 계약은 사용하지 않습니다.
-배치에서 `rows[i:i+20]`으로 예측하고 `rows[i+20].gasoline_price`를 실제값으로 사용합니다.
+배치에서 `rows[i:i+20]`으로 예측하고 `rows[i+20].diesel_price`를 실제값으로 사용합니다.
 응답 `model_version`은 로컬 `v1-local`; MLflow 구현 후 `production:<실제 등록 버전>`으로 식별합니다.
 
 ## 모델·운영

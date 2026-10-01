@@ -45,7 +45,7 @@ class LoadedModel:
 
     def predict_one(self, sequence: list[dict]) -> float:
         """
-        sequence: [{"gasoline_price": ..., "crude_oil_price": ..., "usd_krw": ..., "tax_or_supply_feature": ...}, ...] 길이 SEQ_LEN, 오래된 날 -> 최근 날 순서.
+        sequence: [{"diesel_price": ..., "singapore_diesel_price": ..., "usd_krw": ..., "tax_or_supply_feature": ...}, ...] 길이 SEQ_LEN, 오래된 날 -> 최근 날 순서.
         """
         import numpy as np
 
