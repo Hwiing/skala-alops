@@ -202,6 +202,38 @@ def test_concurrent_retrain_is_skipped(env):
     assert env["calls"] == []
 
 
+@pytest.mark.parametrize("error", [RuntimeError("mlflow down"), FileNotFoundError("csv")])
+def test_transient_failure_is_retried_for_same_detection_after_cooldown(env, monkeypatch, error):
+    """일시 장애(학습 예외·데이터 파일 없음)는 결과를 재사용하지 않는다. 쿨다운 뒤 같은 기간도 다시 학습."""
+    env["error"] = error
+    assert check(drift_pairs())["promoted"] is False
+    monkeypatch.setattr(rt, "RETRAIN_COOLDOWN_SECONDS", 0)
+    env["error"] = None
+
+    assert check(drift_pairs())["status"] == "promoted"
+    assert len(env["calls"]) == 2
+
+
+def test_same_detection_during_result_logging_does_not_retrain(env):
+    """학습이 끝나 결과를 남기는 사이 같은 판정이 또 들어와도 다시 학습하지 않는다 (#47 리뷰 재현)."""
+    seen = []
+
+    class Reenter(logging.Handler):
+        def emit(self, record):
+            if record.getMessage().startswith("[OK]") and not seen:
+                seen.append(rt.check_and_trigger(drift_pairs()))
+
+    handler = Reenter()
+    logging.getLogger("aiops").addHandler(handler)
+    try:
+        first = check(drift_pairs())
+    finally:
+        logging.getLogger("aiops").removeHandler(handler)
+
+    assert first["status"] == "promoted" and seen
+    assert len(env["calls"]) == 1
+
+
 # ---------- 알림 ----------
 
 

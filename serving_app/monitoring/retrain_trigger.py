@@ -18,8 +18,10 @@ AIOps 3/3 (#17): 드리프트 감지 → 로그·운영자 알림 → fine-tunin
        게이트 탈락·예외는 승격이 없으므로 기존 Production이 그대로 서빙된다.
 
 반복 재학습 방지
-    - 같은 판정(모델 버전 + 판정 기간)으로는 한 번만 재학습하고, 다시 들어오면 그때 결과를 재사용한다.
+    - 같은 판정(모델 버전 + 판정 기간)으로 학습을 끝낸 결정(promoted·gate_failed)은 재사용한다.
       서빙이 교체에 실패해 기록을 유지한 경우, 재사용된 promoted 결과로 서빙이 교체를 다시 시도할 수 있다.
+      학습 예외·데이터 부족·Production 없음은 재사용하지 않는다(쿨다운 뒤 같은 판정도 다시 시도).
+    - 캐시 확인·학습·결과 기록은 같은 잠금 안에서 처리한다(같은 판정의 동시 요청이 두 번 학습하지 않음).
     - 승격하지 못한 재학습 뒤에는 RETRAIN_COOLDOWN_SECONDS 동안 새 재학습을 막는다.
     - 재학습이 이미 돌고 있으면 기다리지 않고 바로 돌려준다 (fine-tuning은 수십 초).
     쿨다운·진행 중은 재학습을 하지 않은 상태라 retrain_failed + 이유로 알린다 (정상 ok로 숨기지 않음).
@@ -111,16 +113,6 @@ def _not_retrained(detection: dict, reason: str) -> dict:
     }
 
 
-def _finish(public: dict, detection: dict, key: tuple) -> dict:
-    """재학습을 시도한 결과의 공통 처리: 기록(중복 재사용), 실패면 쿨다운 시작, 알림."""
-    global _last_failure_at
-    _results[key] = public
-    if not public.get("promoted"):
-        _last_failure_at = time.monotonic()
-    _notify(public, detection)
-    return public
-
-
 def check_and_trigger(recent_predictions: list[dict]) -> dict:
     """batch_test가 호출. 반환은 DriftCheck 계약 (서빙은 promoted·version으로 교체를 판단)."""
     detection = evaluate(recent_predictions)
@@ -152,15 +144,7 @@ def check_and_trigger(recent_predictions: list[dict]) -> dict:
     )
 
     if key in _results:
-        logger.info(f"[INFO] retrain skipped - already attempted for period={period}")
-        previous = _results[key]
-        return {
-            **previous,
-            "reasons": [
-                *previous.get("reasons", []),
-                "같은 판정은 재학습하지 않음(이전 결과 재사용)",
-            ],
-        }
+        return _reuse(key, period)
     if _last_failure_at is not None:
         remaining = RETRAIN_COOLDOWN_SECONDS - (time.monotonic() - _last_failure_at)
         if remaining > 0:
@@ -172,40 +156,65 @@ def check_and_trigger(recent_predictions: list[dict]) -> dict:
     if not _retrain_lock.acquire(blocking=False):
         logger.info("[INFO] retrain skipped - another retrain is in progress")
         return _not_retrained(detection, "다른 재학습이 진행 중, 기존 모델 유지")
-
-    reason = _detection_reason(detection)
+    # 결과 기록(_record)까지 잠금 안에서 끝낸다. 잠금을 풀고 기록하면 그 사이에 같은 판정이 들어와
+    # 같은 데이터로 한 번 더 학습한다. 알림은 느릴 수 있어 잠금 밖에서 보낸다.
     try:
-        try:
-            rows = _load_recent_rows()
-            logger.info(
-                f"[INFO] retrain triggered (rows={len(rows)}, "
-                f"data={rows[0]['date']}~{rows[-1]['date']})"
-            )
-            result = _fine_tune(rows)
-        except (ValueError, FileNotFoundError) as exc:
-            if isinstance(exc, FileNotFoundError) or "insufficient_data" in str(exc):
-                logger.error(
-                    f"[ERROR] retrain skipped - insufficient data: {exc} (Production 유지)"
-                )
-                public = {
-                    "status": "insufficient_data",
-                    "promoted": False,
-                    **_detection_fields(detection),
-                    "reasons": [reason, f"재학습 데이터 부족: {exc}"],
-                }
-                return _finish(public, detection, key)
-            raise
-    except Exception as exc:
-        logger.error(f"[ERROR] retrain failed: {exc!r} (Production 유지)")
-        public = {
-            "status": "retrain_failed",
-            "promoted": False,
-            **_detection_fields(detection),
-            "reasons": [reason, f"재학습 실패: {exc!r}"],
-        }
-        return _finish(public, detection, key)
+        if key in _results:  # 첫 확인과 잠금 사이에 다른 요청이 같은 판정을 끝냈다
+            return _reuse(key, period)
+        public = _retrain(detection, key)
     finally:
         _retrain_lock.release()
+    _notify(public, detection)
+    return public
+
+
+def _reuse(key: tuple, period: str) -> dict:
+    logger.info(f"[INFO] retrain skipped - already attempted for period={period}")
+    previous = _results[key]
+    return {
+        **previous,
+        "reasons": [*previous.get("reasons", []), "같은 판정은 재학습하지 않음(이전 결과 재사용)"],
+    }
+
+
+def _record(public: dict, key: tuple) -> dict:
+    """재학습을 시도한 결과를 남긴다. 실패면 쿨다운을 시작한다.
+
+    같은 판정에서 재사용하는 것은 학습을 끝낸 결정(promoted·gate_failed)뿐이다. promoted는 서빙이 교체를
+    다시 시도할 수 있게 남긴다. 학습 예외·데이터 부족·Production 없음은 환경이 고쳐지면 결과가 달라지므로
+    남기지 않고, 쿨다운이 지나면 같은 판정이라도 다시 시도한다.
+    """
+    global _last_failure_at
+    if public.get("status") in ("promoted", "gate_failed"):
+        _results[key] = public
+    if not public.get("promoted"):
+        _last_failure_at = time.monotonic()
+    return public
+
+
+def _retrain(detection: dict, key: tuple) -> dict:
+    """최근 627행으로 fine_tune을 돌려 DriftCheck 결과를 만든다. 호출자가 _retrain_lock을 잡고 있다."""
+    reason = _detection_reason(detection)
+    try:
+        rows = _load_recent_rows()
+        logger.info(
+            f"[INFO] retrain triggered (rows={len(rows)}, "
+            f"data={rows[0]['date']}~{rows[-1]['date']})"
+        )
+        result = _fine_tune(rows)
+    except (ValueError, FileNotFoundError) as exc:
+        if not (isinstance(exc, FileNotFoundError) or "insufficient_data" in str(exc)):
+            return _failed(detection, key, reason, exc)
+        logger.error(f"[ERROR] retrain skipped - insufficient data: {exc} (Production 유지)")
+        public = {
+            "status": "insufficient_data",
+            "promoted": False,
+            **_detection_fields(detection),
+            "reasons": [reason, f"재학습 데이터 부족: {exc}"],
+        }
+        return _record(public, key)
+    except Exception as exc:
+        return _failed(detection, key, reason, exc)
 
     public = {
         **result,
@@ -232,7 +241,18 @@ def check_and_trigger(recent_predictions: list[dict]) -> dict:
             f"[GATE_FAILED] new_rmse={_fmt(public.get('rmse'))} - "
             f"{'; '.join(result.get('reasons') or [])} (Production 유지)"
         )
-    return _finish(public, detection, key)
+    return _record(public, key)
+
+
+def _failed(detection: dict, key: tuple, reason: str, exc: Exception) -> dict:
+    logger.error(f"[ERROR] retrain failed: {exc!r} (Production 유지)")
+    public = {
+        "status": "retrain_failed",
+        "promoted": False,
+        **_detection_fields(detection),
+        "reasons": [reason, f"재학습 실패: {exc!r}"],
+    }
+    return _record(public, key)
 
 
 def reset_state() -> None:
