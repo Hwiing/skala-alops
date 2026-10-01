@@ -30,6 +30,7 @@ import threading
 import time
 from collections.abc import Callable
 
+from serving_app.monitoring import notifier as operator_notifier
 from serving_app.monitoring.drift_detector import evaluate
 
 logger = logging.getLogger("aiops")
@@ -38,8 +39,8 @@ MODEL_NAME = "DieselPricePredictor"
 DATA_CSV = os.getenv("DIESEL_DATA_CSV", "data/processed/diesel_features_2008_spliced.csv")
 RETRAIN_COOLDOWN_SECONDS = float(os.getenv("RETRAIN_COOLDOWN_SECONDS", "600"))
 
-# 운영자 알림 훅 (#16에서 웹훅·메일 어댑터를 연결). event dict 하나를 받는 함수.
-notifier: Callable[[dict], None] | None = None
+# 운영자 알림 훅. 기본은 환경변수로 구성한 OperatorNotifier(로그 + 선택적 웹훅, #16).
+notifier: Callable[[dict], object] | None = operator_notifier.from_env().notify
 
 _retrain_lock = threading.Lock()
 _attempted: set[tuple] = set()  # 이미 재학습을 시도한 (모델 버전, 판정 시작일, 판정 종료일)
