@@ -23,13 +23,13 @@ def make_handler(fail: bool):
             if fail:
                 self.send_response(500)
                 self.end_headers()
-                print("[MOCK] 500 응답 (전송 실패 시나리오)")
+                print("[MOCK] 500 응답 (전송 실패 시나리오)", flush=True)
                 return
             payload = json.loads(body)
             os.makedirs(os.path.dirname(OUT), exist_ok=True)
             with open(OUT, "a", encoding="utf-8") as f:
                 f.write(json.dumps(payload, ensure_ascii=False) + "\n")
-            print("[MOCK] 알림 수신\n" + payload.get("text", body))
+            print("[MOCK] 알림 수신\n" + payload.get("text", body), flush=True)
             self.send_response(200)
             self.end_headers()
             self.wfile.write(b"ok")
@@ -45,7 +45,7 @@ def main():
     ap.add_argument("--port", type=int, default=9009)
     ap.add_argument("--fail", action="store_true")
     args = ap.parse_args()
-    print(f"[MOCK] http://localhost:{args.port} 대기 중 (fail={args.fail})")
+    print(f"[MOCK] http://localhost:{args.port} 대기 중 (fail={args.fail})", flush=True)
     HTTPServer(("0.0.0.0", args.port), make_handler(args.fail)).serve_forever()
 
 
