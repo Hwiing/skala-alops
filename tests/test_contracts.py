@@ -258,7 +258,7 @@ def test_aiops_window_compares_model_with_same_week_naive(monkeypatch):
 
     def rmse(pairs, *, naive=False):
         calls.append((len(pairs), naive))
-        return 5.0 if naive else 6.0
+        return 15.0 if naive else 16.0  # 하한 10원 위에서 naive보다 나쁨
 
     monkeypatch.setattr(drift_detector, "compute_rmse", rmse)
     assert drift_detector.is_drift(window)

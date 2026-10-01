@@ -159,11 +159,33 @@ def test_same_alert_is_suppressed_within_window():
 
 def test_from_env_adds_webhook_only_when_configured(monkeypatch):
     monkeypatch.delenv("AIOPS_ALERT_WEBHOOK_URL", raising=False)
-    assert [a.name for a in nt.from_env().adapters] == ["log"]
+    assert [a.name for a in nt.from_env().adapters] == ["log", "inbox"]
     monkeypatch.setenv("AIOPS_ALERT_WEBHOOK_URL", "http://example.invalid/hook")
     monkeypatch.setenv("AIOPS_ALERT_DEDUP_SECONDS", "60")
     n = nt.from_env()
-    assert [a.name for a in n.adapters] == ["log", "webhook"] and n.dedup_seconds == 60
+    assert [a.name for a in n.adapters] == ["log", "inbox", "webhook"]
+    assert n.dedup_seconds == 60
+
+
+def test_operator_inbox_persists_separate_promotion_and_reload_results(tmp_path):
+    path = tmp_path / "logs" / "alerts.jsonl"
+    n = nt.OperatorNotifier([nt.JsonlAdapter(str(path))])
+    n.notify(result())
+    n.notify(result(reload={"reloaded": False, "version": "champion:3", "error": "down"}))
+    n.notify(result(reload={"reloaded": True, "version": "champion:4"}))
+    n.notify(result(reload={"reloaded": True, "version": "champion:4"}))
+    received = [json.loads(line) for line in path.read_text().splitlines()]
+    assert [a["status"] for a in received] == ["promoted", "reload_failed", "reloaded"]
+    assert received[1]["level"] == "ERROR" and "down" in received[1]["action"]
+    assert received[2]["reload"]["version"] == "champion:4"
+
+
+def test_webhook_outage_still_delivers_to_operator_inbox(tmp_path):
+    path = tmp_path / "alerts.jsonl"
+    n = nt.OperatorNotifier([Broken(), nt.JsonlAdapter(str(path))])
+    out = n.notify(result("gate_failed"))
+    assert out["channels"]["inbox"] == "ok"
+    assert json.loads(path.read_text())["status"] == "gate_failed"
 
 
 # ---------- retrain_trigger 연결 ----------

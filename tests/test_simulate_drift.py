@@ -125,3 +125,17 @@ def test_summary_table():
         "| oil_shock | 소매 +280원 | 200 | drift | 76.00 | 4.00 | promoted | 4 | champion:4 |"
         in table
     )
+
+
+def test_replay_rows_cuts_real_csv(tmp_path):
+    path = tmp_path / "real.csv"
+    lines = ["date,diesel_price,singapore_diesel_price,usd_krw,tax_or_supply_feature"]
+    for i in range(200):
+        day = date(2026, 1, 1).toordinal() + i
+        lines.append(f"{date.fromordinal(day).isoformat()},{1500 + i},90,1400,10")
+    path.write_text("\n".join(lines))
+    rows = sd.replay_rows(str(path), "2026-06-30")
+    assert len(rows) == 175 and rows[-1]["date"] == "2026-06-30"
+    assert rows[0]["diesel_price"] == 1500.0 + (date(2026, 6, 30) - date(2026, 1, 1)).days - 174
+    with pytest.raises(ValueError):
+        sd.replay_rows(str(path), "2026-02-01")  # 175행이 안 됨

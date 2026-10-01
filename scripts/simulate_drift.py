@@ -146,6 +146,22 @@ def generate_rows(
     return rows
 
 
+def replay_rows(path: str, end: str, n: int = BATCH_N) -> list[dict]:
+    """실측 CSV에서 end일까지 n행을 그대로 잘라 배치로 쓴다 (합성 충격 없음).
+
+    기준일은 앞에서 120번째 행부터 28개 → end − 55일 ~ end − 28일. 실제 그 시기에 서빙했다면
+    받았을 판정을 재현한다. 서빙 모델이 그 시기 이후 데이터로 학습됐다면 결과가 낙관적이다.
+    """
+    with open(path, encoding="utf-8-sig") as f:
+        rows = [r for r in csv.DictReader(f) if r["date"] <= end]
+    if len(rows) < n or rows[-1]["date"] != end:
+        raise ValueError(
+            f"{end}까지 {n}행이 필요합니다 (마지막 {rows[-1]['date'] if rows else '-'})"
+        )
+    keys = ("diesel_price", "singapore_diesel_price", "usd_krw", "tax_or_supply_feature")
+    return [{"date": r["date"], **{k: float(r[k]) for k in keys}} for r in rows[-n:]]
+
+
 def describe(rows: list[dict], control: list[dict]) -> str:
     """같은 seed의 정상 대조군 대비 충격 효과 (충격일 이후 가장 크게 벌어진 값).
 
@@ -219,11 +235,13 @@ def summarize(result: dict, inputs: str) -> dict:
     }
 
 
-def to_markdown(summaries: list[dict], meta: str) -> str:
+def to_markdown(
+    summaries: list[dict], meta: str, input_label: str = "입력 충격(대조군 대비 최대)"
+) -> str:
     def f(v):
         return f"{v:.2f}" if isinstance(v, float) else ("-" if v is None else str(v))
 
-    head = "| 시나리오 | 입력 충격(대조군 대비 최대) | HTTP | 판정 | 1주차 RMSE | naive RMSE | 조치 | 승격 | 서빙 교체 |"
+    head = f"| 시나리오 | {input_label} | HTTP | 판정 | 1주차 RMSE | naive RMSE | 조치 | 승격 | 서빙 교체 |"
     lines = [f"> {meta}", "", head, "|" + "---|" * 9]
     for s in summaries:
         lines.append(
@@ -259,7 +277,27 @@ def main():
     ap.add_argument("--timeout", type=float, default=180)
     ap.add_argument("--dry-run", action="store_true", help="서버에 보내지 않고 입력 요약만 출력")
     ap.add_argument("--out", help="결과표(markdown) 저장 경로, 예: logs/scenario_results.md")
+    ap.add_argument("--replay-csv", help="합성 시나리오 대신 실측 CSV 구간을 그대로 보냄")
+    ap.add_argument("--replay-end", nargs="+", default=[], help="재현할 구간의 마지막 날짜들")
     args = ap.parse_args()
+
+    if args.replay_csv:
+        summaries = []
+        for end in args.replay_end:
+            rows = replay_rows(args.replay_csv, end)
+            inputs = f"실측 기준일 {rows[119]['date']}~{rows[146]['date']}"
+            print(f"\n[replay {end}] {inputs}")
+            result = send_batch(rows, f"replay ~{end}", args.url, args.timeout)
+            print(
+                f"  HTTP {result.get('http_status')}: {json.dumps(result.get('drift_check') or result.get('error'), ensure_ascii=False)[:600]}"
+            )
+            summaries.append(summarize(result, inputs))
+        table = to_markdown(summaries, f"실측 재현 {args.replay_csv}, rows={BATCH_N}", "입력 구간")
+        print("\n" + table)
+        if args.out:
+            with open(args.out, "w", encoding="utf-8") as f:
+                f.write(table + "\n")
+        return
 
     base, sigma = base_from_csv(args.base_csv) if args.base_csv else (None, None)
     names = list(SCENARIOS) if args.scenario == "all" else [args.scenario]
