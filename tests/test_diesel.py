@@ -105,7 +105,7 @@ def test_finetune_split_has_no_target_overlap():
 
     frame = DailyFrame(make_rows(n=FINETUNE_MIN_ROWS))
     train_idx, val_idx = split_finetune(frame)
-    assert len(train_idx) == 365 and len(val_idx) == 28
+    assert len(train_idx) == 365 and len(val_idx) == 90
     # 학습 마지막 날의 4주 평균 정답 구간이 검증 첫날 이전에 끝난다
     assert train_idx[-1] + 7 * HORIZONS < val_idx[0]
     assert frame.targets(val_idx[-1]) is not None

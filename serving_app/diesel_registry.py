@@ -11,10 +11,10 @@
 - 게이트(serving_app/diesel_gate.py): 1주차 RMSE ≤ 50 AND 1~4주 모두 < naive AND 1주차 ≤ Production.
   Production은 새 모델과 같은 검증 구간으로 다시 평가해 비교한다.
 - 미통과 시 등록하지 않는다. Production이 없으면 "서비스할 모델 없음", 있으면 "기존 버전 유지"로 구분해 기록.
-- fine_tune(rows) (#11): Production에서 warm start, 최근 365일 학습, 학습과 겹치지 않는 최근 28일로 같은 게이트.
+- fine_tune(rows) (#11): Production에서 warm start, 최근 365일 학습, 학습과 겹치지 않는 최근 90일로 같은 게이트.
   반환 {promoted, rmse, naive_rmse, version?, status, reasons, ...}
     status: "promoted" | "gate_failed" | "no_production"
-    예외: 행이 FINETUNE_MIN_ROWS(565)보다 적으면 ValueError("insufficient_data: ...")
+    예외: 행이 FINETUNE_MIN_ROWS(627)보다 적으면 ValueError("insufficient_data: ...")
 
 실행: python serving_app/diesel_registry.py [--csv data/processed/diesel_features_2008_spliced.csv]
 """

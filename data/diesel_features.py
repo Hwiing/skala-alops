@@ -182,8 +182,9 @@ def build_windows(frame: DailyFrame, indices) -> tuple[list, list, list]:
 
 
 FINETUNE_TRAIN_DAYS = 365
-FINETUNE_VAL_DAYS = 28
-# 첫 학습일 전 문맥 116일 + 학습 타깃 365일 + 겹침 방지 28일 + 검증 타깃 28일 + 마지막 검증의 4주 정답 28일 = 565
+# 검증 90일: 28일이면 4주 예측 시험이 사실상 1번이라 쇼크 한 번에 판정이 뒤집힘(evidence/10)
+FINETUNE_VAL_DAYS = 90
+# 첫 학습일 전 문맥 116일 + 학습 타깃 365일 + 겹침 방지 28일 + 검증 타깃 90일 + 마지막 검증의 4주 정답 28일 = 627
 FINETUNE_MIN_ROWS = (
     GAP_WINDOW + SEQ_LEN - 2 + FINETUNE_TRAIN_DAYS + 7 * HORIZONS + FINETUNE_VAL_DAYS + 7 * HORIZONS
 )
