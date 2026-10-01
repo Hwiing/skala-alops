@@ -13,13 +13,14 @@ v2가 합의·구현되기 전까지 실제 코드는 아래 **v1(휘발유 다�
 | 기간 | 2023-09 ~ | **2008-04-15 ~** | 유나 |
 | 정책표 | 없음 | `data/reference/diesel_fuel_tax_cut.csv`(유류세), `data/reference/price_cap.csv`(최고가격: 시행일·종료일·상한·발표일). 모델이 예측 때 읽음. 정책이 발표되면 표만 갱신, 재학습 불필요 | 유나(세금), 소영(상한) |
 | API 입력 | `sequence` 20개, 날짜 없음 | **최근 120일**, 행마다 `date` 포함(오래된 날 → 최근 날). 정책표 조회에 날짜 필요 | 준형 |
-| API 출력 | `predicted_price` | `predictions`: `[{horizon_week, start_date, end_date, predicted_avg_price}] × 4`, `base_date`, `model_version` | 준형 |
-| 모델 | `GasolinePricePredictor`(Keras) | `DieselPricePredictor`, MLflow pyfunc 1개(LSTM + scaler + 정책 규칙). 서빙은 `predict()`만 호출 | 소영 → 준형 |
+| API 출력 | `predicted_price` | `predictions`: `[{horizon_week, start_date, end_date, predicted_avg_price}] × 4`, `base_date`, `model_version`. 모델은 숫자 4개만 내고, 날짜는 서빙이 계산: k주 = `base_date`+7(k−1)+1 ~ `base_date`+7k, `base_date` = 마지막 입력일 | 준형 |
+| 모델 | `GasolinePricePredictor`(Keras) | `DieselPricePredictor`, MLflow pyfunc 1개(LSTM + scaler + 정책 규칙). **`predict(df)`**: 입력 DataFrame 1건 = 최근 120행(`date` + 피처 4개, 오래된 날 → 최근 날), 출력 = 1~4주 평균가 float 4개(원/L, 1주차부터) | 소영 → 준형 |
+| 모델 주소 | `models:/GasolinePricePredictor/Production` | 승격 시 stage `Production`과 alias `champion`을 같은 버전에 같이 붙임 → `models:/DieselPricePredictor/Production` = `models:/DieselPricePredictor@champion`. `MODEL_SOURCE=local`은 `mlflow.pyfunc.load_model("serving_app/models/diesel_pyfunc")`로 같은 방식으로 읽음 | 소영·준형 |
 | naive | 직전 날 가격 | 마지막 입력일 가격을 1~4주 모두에 사용 | 소영 |
 | 배포 게이트 | `RMSE ≤ 10 AND RMSE < naive` | **1주차 `RMSE ≤ 50` AND 1~4주 모두 `RMSE < naive_rmse` AND 1주차 `RMSE ≤ Production RMSE`**(Production이 있을 때, 같은 검증 구간). 비유한 값 거부 | 소영·동찬 |
 | 드리프트 (제안) | 최근 21건 RMSE > 10 | 정답이 확보된 최근 28일의 **1주차 RMSE > 같은 기간 naive RMSE**(1주차 정답은 7일 뒤 확보) | 동찬 |
-| fine-tuning | 최근 30일, 80:20 분할 | 최근 365일로 Production에서 warm start, 학습에 쓰지 않은 최근 28일로 검증, 게이트 동일, 반환 `{promoted, rmse, naive_rmse, version?}` 유지 | 소영 → 동찬 |
-| 배치·업로드 최소 행 | 41행, `rows[i:i+20]` | **148행**(입력 120 + 4주 정답 28), `rows[i:i+120]` 예측 → 다음 1~4주 실제 평균과 비교 | 준형·동찬 |
+| fine-tuning | 최근 30일, 80:20 분할 | **저장된 전체 데이터의 최근 565행**으로 호출(업로드분만으로는 부족할 수 있음). 최근 365일 학습(Production warm start, scaler 재fit 금지), 학습에 쓰지 않은 최근 28일 검증, 게이트 동일. 반환 `{promoted, rmse, naive_rmse, version?, status}`, `status` = `promoted`·`gate_failed`·`no_production`, 565행 미만은 `ValueError("insufficient_data")` | 소영 → 동찬 |
+| 배치·업로드 최소 행 | 41행, `rows[i:i+20]` | **175행**(입력 120 + 짝 28건 − 1 + 4주 정답 28), `rows[i:i+120]` 예측 → 다음 1~4주 실제 평균과 비교, 최근 28건으로 드리프트 판정. AIOps에 넘기는 짝(제안): `{date, predicted[4], actual[4], naive}`, naive = 마지막 입력일 가격 | 준형·동찬 |
 
 게이트 수치 근거
 - 50원: 화물 안전운임제는 3개월 평균 경유가가 ±50원 이상 변하면 운임을 다시 고시합니다. 운송업계가 결정을 바꾸는 단위이므로 1주 예측 오차의 업무 허용 한도로 씁니다. 10원은 다음날 휘발유(naive 3~8원) 기준이라 주간 예측에 맞지 않습니다(2026 검증 구간 1주차 naive 34.6원).
