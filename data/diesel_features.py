@@ -179,3 +179,30 @@ def build_windows(frame: DailyFrame, indices) -> tuple[list, list, list]:
         if len(seq) == SEQ_LEN:
             X.append(seq), Y.append(y), kept.append(i)
     return X, Y, kept
+
+
+FINETUNE_TRAIN_DAYS = 365
+# 검증 90일: 28일이면 4주 예측 시험이 사실상 1번이라 쇼크 한 번에 판정이 뒤집힘(evidence/10)
+FINETUNE_VAL_DAYS = 90
+# 첫 학습일 전 문맥 116일 + 학습 타깃 365일 + 겹침 방지 28일 + 검증 타깃 90일 + 마지막 검증의 4주 정답 28일 = 627
+FINETUNE_MIN_ROWS = (
+    GAP_WINDOW + SEQ_LEN - 2 + FINETUNE_TRAIN_DAYS + 7 * HORIZONS + FINETUNE_VAL_DAYS + 7 * HORIZONS
+)
+
+
+def split_finetune(
+    frame: DailyFrame, train_days: int = FINETUNE_TRAIN_DAYS, val_days: int = FINETUNE_VAL_DAYS
+) -> tuple[list[int], list[int]]:
+    """fine-tuning (학습 날짜, 검증 날짜). 검증 = 정답이 확보된 가장 최근 val_days일.
+    학습 = 그보다 28일 이상 앞선 train_days일 → 학습 타깃(다음 4주 평균)이 검증 날짜와 겹치지 않는다."""
+    answered = [i for i in range(len(frame.dates)) if frame.targets(i) is not None]
+    first_ok = GAP_WINDOW + SEQ_LEN - 2  # 입력 28일의 첫날도 90일 평균 피처가 있어야 함
+    usable = [i for i in answered if i >= first_ok]
+    if len(usable) < train_days + 7 * HORIZONS + val_days:
+        raise ValueError(
+            f"insufficient_data: fine-tuning에 최소 {FINETUNE_MIN_ROWS}행이 필요합니다 "
+            f"(현재 {len(frame.dates)}행, 학습·검증 가능한 날 {len(usable)}일)"
+        )
+    val_idx = usable[-val_days:]
+    train_idx = [i for i in usable if i <= val_idx[0] - 7 * HORIZONS - 1][-train_days:]
+    return train_idx, val_idx

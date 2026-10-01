@@ -11,12 +11,17 @@
 - 게이트(serving_app/diesel_gate.py): 1주차 RMSE ≤ 50 AND 1~4주 모두 < naive AND 1주차 ≤ Production.
   Production은 새 모델과 같은 검증 구간으로 다시 평가해 비교한다.
 - 미통과 시 등록하지 않는다. Production이 없으면 "서비스할 모델 없음", 있으면 "기존 버전 유지"로 구분해 기록.
+- fine_tune(rows) (#11): Production에서 warm start, 최근 365일 학습, 학습과 겹치지 않는 최근 90일로 같은 게이트.
+  반환 {promoted, rmse, naive_rmse, version?, status, reasons, ...}
+    status: "promoted" | "gate_failed" | "no_production"
+    예외: 행이 FINETUNE_MIN_ROWS(627)보다 적으면 ValueError("insufficient_data: ...")
 
 실행: python serving_app/diesel_registry.py [--csv data/processed/diesel_features_2008_spliced.csv]
 """
 
 import argparse
 import hashlib
+import json
 import os
 import sys
 import tempfile
@@ -34,18 +39,28 @@ from mlflow.tracking import MlflowClient  # noqa: E402
 from data.diesel_features import (  # noqa: E402
     DIESEL_COLUMNS,
     FEATURES,
+    FINETUNE_MIN_ROWS,
     INPUT_DAYS,
     SEQ_LEN,
     DailyFrame,
     load_diesel_rows,
+    split_finetune,
 )
 from data.diesel_policy import PASS_DAY0, PASS_DAYS  # noqa: E402
 from serving_app.diesel_gate import WEEK1_RMSE_MAX, check_gate  # noqa: E402
 from serving_app.diesel_model import DieselForecaster  # noqa: E402
-from serving_app.diesel_training import evaluate, fit, report, split_holdout  # noqa: E402
+from serving_app.diesel_training import (  # noqa: E402
+    evaluate,
+    finetune,
+    fit,
+    report,
+    split_holdout,
+)
 
 MODEL_NAME = "DieselPricePredictor"
 ALIAS = "champion"  # stage(Production)와 같은 버전을 가리키는 새 방식 주소
+FINE_TUNE_EPOCHS = 10
+FINE_TUNE_LR = 1e-4  # base 학습(1e-3)보다 낮게, 기존 지식을 유지하며 최근 패턴만 반영
 DEFAULT_CSV = "data/processed/diesel_features_2008_spliced.csv"
 
 
@@ -186,16 +201,56 @@ def train_and_register(
     return log_and_gate(forecaster, frame, val_idx, meta, run_name="diesel-base-train")
 
 
+def fine_tune(rows: list[dict]) -> dict:
+    """#11 드리프트 재학습. rows: 최근 데이터(하루 간격, 최소 FINETUNE_MIN_ROWS행)."""
+    frame = DailyFrame(rows)
+    train_idx, val_idx = split_finetune(frame)  # 부족하면 ValueError("insufficient_data: ...")
+    version = production_version(MlflowClient())
+    if version is None:
+        print(
+            "[FINE-TUNE SKIPPED] Production 없음 → warm start 불가. 먼저 train_and_register()로 base 모델을 배포하세요"
+        )
+        return {
+            "promoted": False,
+            "status": "no_production",
+            "rmse": None,
+            "naive_rmse": None,
+            "reasons": ["Production 없음"],
+        }
+    forecaster = load_forecaster(version)
+    info = finetune(forecaster, frame, train_idx, FINE_TUNE_EPOCHS, FINE_TUNE_LR)
+    meta = {
+        "mode": "fine-tune",
+        "data": f"rows:{len(rows)}",
+        "data_sha256": hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest(),
+        "data_period": [frame.dates[0].isoformat(), frame.dates[-1].isoformat()],
+        "rows": len(rows),
+        "base_version": version,
+        **info,
+        **evaluate(forecaster, frame, val_idx),
+    }
+    print(report(meta))
+    result = log_and_gate(forecaster, frame, val_idx, meta, run_name="diesel-fine-tune")
+    result["status"] = "promoted" if result["promoted"] else "gate_failed"
+    return result
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--csv", default=DEFAULT_CSV)
     ap.add_argument("--holdout-days", type=int, default=365)
     ap.add_argument("--seeds", default="42,7,2026")
     ap.add_argument(
+        "--fine-tune", action="store_true", help="Production에서 이어서 최근 데이터로 재학습 (#11)"
+    )
+    ap.add_argument(
         "--synthetic", action="store_true", help="합성 데이터면 표시 (성능 증빙에 쓰지 않음)"
     )
     args = ap.parse_args()
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db"))
+    if args.fine_tune:
+        print(fine_tune(load_diesel_rows(args.csv)[-FINETUNE_MIN_ROWS:]))
+        return
     train_and_register(
         args.csv, args.holdout_days, [int(s) for s in args.seeds.split(",")], args.synthetic
     )
