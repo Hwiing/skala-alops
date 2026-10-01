@@ -3,12 +3,12 @@
 
 구조: LSTM(16) → Dropout(0.3) → Dense(16, relu) → Dense(4), L2 1e-4. 입력 (28일, 8피처), 출력 = 1~4주 평균 세전 가격 변화(표준화).
 seed 여러 개의 평균을 쓴다(단일 seed 편차 완화). 정책 규칙은 DieselForecaster.predict()에서 적용해
-서빙은 최근 120일 행만 넘기면 4개 가격을 받는다.
+서빙은 최근 120일 행만 넘기면 1~4주 평균가 4개를 받는다.
 """
 
 import json
 import pickle
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -65,24 +65,15 @@ class DieselForecaster:
         out = np.mean([m.predict(X, verbose=0) for m in self.models], axis=0)
         return out * np.array(self.scaler.y_std)
 
-    def predict(self, rows: list[dict]) -> list[dict]:
+    def predict(self, rows: list[dict]) -> list[float]:
+        """최근 INPUT_DAYS일 행 → 1~4주 평균 경유가(원/L) 4개. 날짜 구간은 서빙이 base_date(마지막 입력일)로 계산."""
         if len(rows) < INPUT_DAYS:
             raise ValueError(f"최근 {INPUT_DAYS}일 행이 필요합니다 (현재 {len(rows)}행)")
         frame = DailyFrame(rows[-INPUT_DAYS:])
         i = len(frame.dates) - 1
         seq = [frame.features(j) for j in range(i - SEQ_LEN + 1, i + 1)]
         X = np.array([self.scaler.transform(seq)], dtype="float32")
-        prices = frame.apply_policy(i, list(self.predict_changes(X)[0]))
-        base = frame.dates[i]
-        return [
-            {
-                "horizon_week": k + 1,
-                "start_date": (base + timedelta(days=7 * k + 1)).isoformat(),
-                "end_date": (base + timedelta(days=7 * k + 7)).isoformat(),
-                "predicted_avg_price": round(p, 1),
-            }
-            for k, p in enumerate(prices)
-        ]
+        return [float(p) for p in frame.apply_policy(i, list(self.predict_changes(X)[0]))]
 
     def save(self, path: str = MODEL_DIR, meta: dict | None = None):
         Path(path).mkdir(parents=True, exist_ok=True)
