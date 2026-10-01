@@ -12,6 +12,7 @@ from data.features import GasolineScaler, build_sequences, load_rows
 from serving_app import model_loader
 from serving_app.main import app
 from serving_app.monitoring import retrain_trigger
+from serving_app.monitoring.prediction_window import PredictionWindow
 from serving_app.routers import data as data_router
 from serving_app.routers import predict as predict_router
 from serving_app.schemas import BATCH_MIN_ROWS
@@ -118,6 +119,11 @@ def test_missing_model_returns_503(client, monkeypatch):
     assert client.post("/predict", json=payload()).status_code == 503
 
 
+def _public(record):
+    """내부 기록 → HTTP BatchPair 필드만."""
+    return {k: record[k] for k in ("date", "predicted", "actual", "naive")}
+
+
 class LastPriceModel:
     """마지막 입력일 가격 + k를 k주 예측으로 돌려주는 가짜 모델 (짝 정렬을 확인하기 쉽게)."""
 
@@ -147,7 +153,7 @@ def batch(client, monkeypatch):
     monkeypatch.setattr(model_loader, "_model_cache", LastPriceModel())
     monkeypatch.setattr(retrain_trigger, "check_and_trigger", trigger)
     monkeypatch.setattr(model_loader, "reload_model", reload)
-    monkeypatch.setattr(predict_router, "recent_predictions", [])
+    monkeypatch.setattr(predict_router, "recent_predictions", PredictionWindow())
 
     def post(length=BATCH_MIN_ROWS):
         return client.post("/predict/batch-test", json={"rows": make_rows(length)})
@@ -169,19 +175,22 @@ def test_batch_pairs_each_base_date_with_weekly_actuals(batch):
         "naive": 1619.0,
     }
     assert pairs[-1]["date"] == "2026-05-27"
-    assert predict_router.recent_predictions == pairs
-    assert batch.calls["trigger"] == [pairs]
+    # 내부 기록에는 모델 버전·출처가 붙고, AIOps에는 그 기록이 그대로 넘어간다
+    recorded = predict_router.recent_predictions.pairs()
+    assert [_public(p) for p in recorded] == pairs
+    assert {(p["model_version"], p["source"]) for p in recorded} == {("champion:1", "batch")}
+    assert batch.calls["trigger"] == [recorded]
 
 
 def test_batch_rejects_too_few_rows(batch):
     assert batch.post(BATCH_MIN_ROWS - 1).status_code == 422
 
 
-def test_batch_keeps_only_latest_window(batch):
-    batch.post(BATCH_MIN_ROWS + 5)
-    batch.post()
+def test_batch_resend_does_not_double_count_base_dates(batch):
+    batch.post(BATCH_MIN_ROWS + 5)  # 기준일 33개
+    batch.post()  # 그중 앞 28개 기준일을 다시 보냄
 
-    assert len(predict_router.recent_predictions) == 28
+    assert len(predict_router.recent_predictions) == 33  # 같은 기준일은 덮어씀
 
 
 def test_batch_promoted_reloads_promoted_version_and_clears_window(batch):
@@ -198,7 +207,7 @@ def test_batch_promoted_reloads_promoted_version_and_clears_window(batch):
     assert response.status_code == 200
     assert response.json()["drift_check"]["reload"] == {"reloaded": True, "version": "champion:2"}
     assert batch.calls["reload"] == ["2"]
-    assert predict_router.recent_predictions == []
+    assert len(predict_router.recent_predictions) == 0
 
 
 def test_batch_reload_failure_keeps_window(batch):

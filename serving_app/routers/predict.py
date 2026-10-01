@@ -10,9 +10,9 @@ from pydantic import ValidationError
 
 from data.diesel_features import INPUT_DAYS, WINDOWS
 from serving_app import model_loader
-from serving_app.monitoring import retrain_trigger
+from serving_app.monitoring import prediction_window, retrain_trigger
+from serving_app.monitoring.prediction_window import PredictionWindow
 from serving_app.schemas import (
-    PAIR_WINDOW,
     BatchPair,
     BatchTestRequest,
     BatchTestResponse,
@@ -25,9 +25,9 @@ from serving_app.schemas import (
 
 router = APIRouter()
 
-# 최근 예측 짝({date, predicted[4], actual[4], naive})을 PAIR_WINDOW(28)건만 유지한다.
-# ponytail: 전역 리스트·잠금 없음(단일 사용자 시연용), 동시 배치 요청이 생기면 잠금 추가.
-recent_predictions: list[dict] = []
+# 최근 예측 기록. AIOps 내부 윈도우(#15)에 모델 버전·출처(batch)와 함께 남긴다.
+# 같은 기준일은 덮어쓰고(재집계 방지), 잠금으로 동시 배치를 보호한다. HTTP 응답의 BatchPair와는 별개 타입.
+recent_predictions: PredictionWindow = prediction_window.window
 
 
 def _get_model_or_503():
@@ -98,12 +98,11 @@ def batch_test(req: BatchTestRequest):
     """
     model = _get_model_or_503()
     pairs = _pair_with_actual(model, [p.model_dump(mode="json") for p in req.rows])
-    recent_predictions.extend(pairs)
-    del recent_predictions[:-PAIR_WINDOW]
+    recent_predictions.record_batch(pairs, model.version)
 
     try:
         drift_check = DriftCheck.model_validate(
-            retrain_trigger.check_and_trigger(recent_predictions)
+            retrain_trigger.check_and_trigger(recent_predictions.pairs())
         ).model_dump(exclude_none=True)
     except NotImplementedError as exc:
         raise HTTPException(501, f"AIOps 판정 미구현: {exc}") from exc

@@ -18,6 +18,7 @@ from serving_app import model_loader
 from serving_app.diesel_gate import check_gate
 from serving_app.main import app
 from serving_app.monitoring import retrain_trigger
+from serving_app.monitoring.prediction_window import PredictionWindow
 from serving_app.routers import predict as predict_router
 from serving_app.schemas import (
     BatchPair,
@@ -111,16 +112,16 @@ def test_invalid_model_output_is_503_and_never_added_to_window(
     monkeypatch.setattr(
         model_loader, "_model_cache", SimpleNamespace(version="local", predict=lambda rows: bad)
     )
-    existing = [
-        {"date": "2025-01-01", "predicted": [1500] * 4, "actual": [1501] * 4, "naive": 1500}
-    ]
-    monkeypatch.setattr(predict_router, "recent_predictions", existing.copy())
+    existing = PredictionWindow()
+    existing.record("2025-01-01", [1500] * 4, 1500, "local", [1501] * 4, "batch")
+    before = existing.pairs()
+    monkeypatch.setattr(predict_router, "recent_predictions", existing)
     key, rows = (
         ("sequence", batch_rows[:INPUT_DAYS]) if endpoint == "/predict" else ("rows", batch_rows)
     )
     response = TestClient(app).post(endpoint, json={key: rows})
     assert response.status_code == 503
-    assert predict_router.recent_predictions == existing
+    assert predict_router.recent_predictions.pairs() == before
 
 
 @pytest.mark.parametrize(
@@ -138,7 +139,7 @@ def test_invalid_aiops_result_never_reloads_or_clears_window(monkeypatch, batch_
         "_model_cache",
         SimpleNamespace(version="champion:1", predict=lambda rows: [1600] * 4),
     )
-    monkeypatch.setattr(predict_router, "recent_predictions", [])
+    monkeypatch.setattr(predict_router, "recent_predictions", PredictionWindow())
     monkeypatch.setattr(retrain_trigger, "check_and_trigger", lambda rows: bad)
 
     def unexpected_reload(version):
@@ -218,8 +219,9 @@ def test_aiops_window_compares_model_with_same_week_naive(monkeypatch):
     from serving_app.monitoring import drift_detector
 
     window = [
-        {"date": "2026-04-30", "predicted": [1600] * 4, "actual": [1700] * 4, "naive": 1650}
-    ] * 28
+        {"date": f"2026-04-{d:02d}", "predicted": [1600] * 4, "actual": [1700] * 4, "naive": 1650}
+        for d in range(1, 29)
+    ]
     calls = []
 
     def rmse(pairs, *, naive=False):
@@ -229,6 +231,14 @@ def test_aiops_window_compares_model_with_same_week_naive(monkeypatch):
     monkeypatch.setattr(drift_detector, "compute_rmse", rmse)
     assert drift_detector.is_drift(window)
     assert calls == [(28, False), (28, True)]
+
+
+def test_aiops_duplicate_base_dates_are_not_recounted():
+    from serving_app.monitoring import drift_detector
+
+    one_day = {"date": "2026-04-30", "predicted": [1600] * 4, "actual": [1700] * 4, "naive": 1650}
+    result = drift_detector.evaluate([one_day] * 28)  # 같은 기준일 28번 = 짝 1개
+    assert result["status"] == "insufficient_data" and result["n"] == 1
 
 
 def test_health_identifies_active_contract(monkeypatch):
