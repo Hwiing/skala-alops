@@ -3,7 +3,7 @@
 
 오피넷 CSV저장 파일은 CP949 인코딩이고, 날짜가 "2026년09월26일"(국내 평균판매가격)이나
 "26년09월24일"(국제유가)처럼 한글 형식으로 들어 있습니다. 여기서 ISO 날짜와 숫자로
-정규화해 data/features.py의 공통 계약(date, diesel_price, ...)에 맞춥니다.
+정규화합니다. 보통휘발유와 자동차용경유는 서로 다른 목표 컬럼으로 반환합니다.
 
 원본 파일은 data/raw/에 그대로 보존하고(커밋하지 않음), 변환은 항상 원본에서 다시
 수행해 같은 원본이면 같은 결과가 나오도록 합니다.
@@ -15,6 +15,7 @@ from datetime import date, datetime, timedelta
 from math import isfinite
 
 GASOLINE_COLUMN = "보통휘발유"
+DIESEL_COLUMN = "자동차용경유"
 DATE_FORMATS = ("%Y년%m월%d일", "%y년%m월%d일", "%Y-%m-%d", "%Y.%m.%d", "%Y/%m/%d", "%Y%m%d")
 
 
@@ -69,12 +70,8 @@ def parse_series(rows: list[dict], date_column: str, value_column: str) -> list[
     return sorted(by_day.items())
 
 
-def load_opinet_gasoline(path: str, column: str = GASOLINE_COLUMN) -> list[dict]:
-    """오피넷 '국내유가통계 > 주유소 > 평균판매가격 > 제품별(일간)' CSV -> date, diesel_price.
-
-    주유소 평균판매가격은 주말·공휴일에도 매일 집계되므로 날짜 누락은 원본 문제로 보고
-    보간하지 않고 오류로 알린다.
-    """
+def _load_opinet_product(path: str, column: str, price_key: str) -> list[dict]:
+    """제품별 일간 평균판매가격을 날짜와 원/L 가격으로 변환한다."""
     series = parse_series(read_csv_text(path), "구분", column)
     for (day, _), (next_day, _) in zip(series, series[1:]):
         if next_day != day + timedelta(days=1):
@@ -83,8 +80,36 @@ def load_opinet_gasoline(path: str, column: str = GASOLINE_COLUMN) -> list[dict]
             )
     for day, price in series:
         if price <= 0:
-            raise ValueError(f"{day} 휘발유 가격이 양수가 아닙니다: {price}")
-    return [{"date": day.isoformat(), "diesel_price": price} for day, price in series]
+            raise ValueError(f"{day} {column} 가격이 양수가 아닙니다: {price}")
+    return [{"date": day.isoformat(), price_key: price} for day, price in series]
+
+
+def load_opinet_gasoline(path: str, column: str = GASOLINE_COLUMN) -> list[dict]:
+    """오피넷 일간 보통휘발유 CSV -> date, diesel_price (#42 공통 컬럼명; 기존 휘발유 경로 호환용)."""
+    return _load_opinet_product(path, column, "diesel_price")
+
+
+def load_opinet_diesel(path: str, column: str = DIESEL_COLUMN) -> list[dict]:
+    """오피넷 일간 자동차용경유 CSV -> date, diesel_price."""
+    return _load_opinet_product(path, column, "diesel_price")
+
+
+def load_opinet_diesel_many(paths: list[str]) -> list[dict]:
+    """기간별로 나눠 받은 경유 CSV를 이어 붙이고 경계의 중복·누락을 검사한다."""
+    if not paths:
+        raise ValueError("경유 원본 파일이 없습니다")
+    by_day: dict[str, float] = {}
+    for path in paths:
+        for row in load_opinet_diesel(path):
+            day, price = row["date"], row["diesel_price"]
+            if day in by_day and by_day[day] != price:
+                raise ValueError(f"{day} 경유 가격이 원본 파일 사이에서 다릅니다")
+            by_day[day] = price
+    days = sorted(by_day)
+    for previous, current in zip(days, days[1:]):
+        if date.fromisoformat(current) != date.fromisoformat(previous) + timedelta(days=1):
+            raise ValueError(f"{previous} 다음 날짜가 {current}입니다 (경유 가격 누락)")
+    return [{"date": day, "diesel_price": by_day[day]} for day in days]
 
 
 def main():

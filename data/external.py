@@ -1,5 +1,5 @@
 """
-외부 피처(국제유가·환율·유류세 인하율)를 휘발유 날짜에 맞춰 붙이는 모듈.
+외부 피처(국제유가·환율·유류세 인하율)를 가격 날짜에 맞춰 붙이는 모듈.
 
 핵심 원칙은 "D일 입력에는 D일 예측 시점에 이미 공개된 값만 쓴다"입니다.
 국제유가·환율은 거래일에만 값이 있으므로, 각 D일에 대해 공개 시점(lag)을 지난 가장
@@ -8,7 +8,7 @@
     singapore_diesel_price : 오피넷 두바이유 현물(USD/bbl). 싱가포르 장 마감 기준이라 같은 날
                       국내 가격 집계보다 늦게 공개될 수 있어 1일 지연(D-1까지)만 사용.
     usd_krw         : 한국은행 ECOS 원/미국달러 매매기준율. D일 오전 고시되므로 D일 값 사용.
-    tax_or_supply_feature : 휘발유 유류세 인하율(%). 시행일이 사전 고시되는 정책값.
+    tax_or_supply_feature : 선택한 제품의 유류세 인하율(%). 시행일이 사전 고시되는 정책값.
                       공급 차질은 일별 관측 지표가 없어 피처에서 제외하고 드리프트 시나리오로만 다룬다.
 """
 
@@ -20,18 +20,53 @@ from data.opinet import parse_date, parse_number, parse_series, read_csv_text
 
 CRUDE_COLUMN = "Dubai"
 CRUDE_LAG_DAYS = 1
+SINGAPORE_DIESEL_COLUMN = "경유(0.001%)"
+SINGAPORE_DIESEL_LAG_DAYS = 1
 FX_LAG_DAYS = 0
-# 설·추석 연휴에도 국제유가·환율 공백은 일주일을 넘지 않는다. 넘으면 원본 누락으로 본다.
+# 기본 상한. 더 긴 공식 휴장 간격은 피처별 원본을 검증한 뒤 별도 상한을 쓴다.
 MAX_STALE_DAYS = 7
+# ECOS 2017-09-29~2017-10-10 관측 사이의 추석 연휴가 가장 길다.
+# 직전 값이 필요한 마지막 날(10-09)은 관측일로부터 10일이므로 10일까지만 허용한다.
+MAX_FX_STALE_DAYS = 10
 TAX_POLICY_PATH = "data/reference/gasoline_fuel_tax_cut.csv"
+MAX_CRUDE_USD_PER_BBL = 300
+MAX_SINGAPORE_DIESEL_USD_PER_BBL = 500
 
 
 def load_opinet_crude(path: str, column: str = CRUDE_COLUMN) -> list[tuple[date, float]]:
-    """오피넷 '유가관련정보 > 국제유가 > 원유' CSV저장($ 단위) -> [(날짜, USD/bbl)]."""
-    series = parse_series(read_csv_text(path), "기간", column)
+    """오피넷 두바이유($ 단위). 휴장일의 빈 관측값은 건너뛴다."""
+    rows = [row for row in read_csv_text(path) if str(row.get(column) or "").strip()]
+    series = parse_series(rows, "기간", column)
     for day, price in series:
         if price <= 0:
             raise ValueError(f"{day} 국제유가가 양수가 아닙니다: {price}")
+        if price > MAX_CRUDE_USD_PER_BBL:
+            raise ValueError(
+                f"{day} 국제유가 {price}는 USD/bbl로 보기 어렵습니다. "
+                "오피넷 화면의 단위를 `$`로 두고 다시 저장하세요 (`원`은 원/L)"
+            )
+    return series
+
+
+def load_opinet_singapore_diesel(
+    paths: list[str], column: str = SINGAPORE_DIESEL_COLUMN
+) -> list[tuple[date, float]]:
+    """오피넷 싱가포르 경유 가격을 USD/bbl로 읽고 휴장일을 건너뛴다."""
+    if not paths:
+        raise ValueError("싱가포르 경유 원본 파일이 없습니다")
+    rows = []
+    for path in paths:
+        part = read_csv_text(path)
+        if not part or column not in part[0]:
+            raise ValueError(f"{path}: {column!r} 컬럼이 없습니다")
+        rows.extend(row for row in part if str(row.get(column) or "").strip())
+    series = parse_series(rows, "기간", column)
+    for day, price in series:
+        if price <= 0 or price > MAX_SINGAPORE_DIESEL_USD_PER_BBL:
+            raise ValueError(
+                f"{day} 싱가포르 경유 {price}는 USD/bbl로 보기 어렵습니다. "
+                "오피넷 단위를 `$`로 두고 다시 저장하세요 (`원`은 원/L)"
+            )
     return series
 
 
@@ -42,6 +77,38 @@ def load_usd_krw(path: str) -> list[tuple[date, float]]:
         if rate <= 0:
             raise ValueError(f"{day} 환율이 양수가 아닙니다: {rate}")
     return series
+
+
+def load_ecos_wide_usd_krw(path: str) -> list[tuple[date, float]]:
+    """ECOS 웹사이트 CSV(날짜가 열인 형식)에서 원/미국달러 행만 읽는다."""
+    rows = read_csv_text(path)
+    matches = [row for row in rows if row.get("계정항목") == "원/미국달러(매매기준율)"]
+    if len(matches) != 1 or matches[0].get("단위") != "원":
+        raise ValueError("ECOS 원/미국달러(매매기준율), 단위 원 행이 정확히 하나여야 합니다")
+    row = matches[0]
+    series = parse_series(
+        [
+            {"date": key, "usd_krw": value}
+            for key, value in row.items()
+            if key not in ("통계표", "계정항목", "단위", "변환") and str(value or "").strip()
+        ],
+        "date",
+        "usd_krw",
+    )
+    if any(rate <= 0 for _, rate in series):
+        raise ValueError("ECOS 환율은 양수여야 합니다")
+    return series
+
+
+def merge_observed_series(*series: list[tuple[date, float]]) -> list[tuple[date, float]]:
+    """기간별 실측을 합치되 겹치는 날짜 값이 다르면 중단한다."""
+    by_day = {}
+    for part in series:
+        for day, value in part:
+            if day in by_day and by_day[day] != value:
+                raise ValueError(f"{day} 실측값이 원본 파일 사이에서 다릅니다")
+            by_day[day] = value
+    return sorted(by_day.items())
 
 
 def load_tax_policy(path: str = TAX_POLICY_PATH) -> list[tuple[date, date, float]]:
