@@ -39,7 +39,7 @@ FX_CSV = (
 
 def gasoline(start="2023-01-06", days=6):
     return [
-        {"date": (D(start) + timedelta(days=i)).isoformat(), "gasoline_price": 1540.0 + i}
+        {"date": (D(start) + timedelta(days=i)).isoformat(), "diesel_price": 1540.0 + i}
         for i in range(days)
     ]
 
@@ -114,8 +114,8 @@ def test_build_rows_matches_contract(tmp_path):
     assert list(rows[0]) == ["date", *FEATURE_COLUMNS]
     assert rows[0] == {
         "date": "2023-01-06",
-        "gasoline_price": 1541.0,
-        "crude_oil_price": 77.0,
+        "diesel_price": 1541.0,
+        "singapore_diesel_price": 77.0,
         "usd_krw": 1268.2,
         "tax_or_supply_feature": 25.0,
     }

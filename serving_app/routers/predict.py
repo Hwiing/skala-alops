@@ -34,7 +34,7 @@ def predict(req: PredictRequest):
 def batch_test(req: BatchTestRequest):
     """TODO(hootbee + kchanis1223): req.rows의 20일 윈도우를 순서대로 예측.
 
-    다음 행 gasoline_price를 actual로 연결하고 recent_predictions 최근 21건 유지.
+    다음 행 diesel_price를 actual로 연결하고 recent_predictions 최근 21건 유지.
     check_and_trigger 결과를 반환. 원본 TODO 미구현 상태를 성공으로 표시하지 않는다.
     """
     raise HTTPException(501, "TODO: batch_test 슬라이딩 예측 및 드리프트 연결")
