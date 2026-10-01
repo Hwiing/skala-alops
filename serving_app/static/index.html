@@ -204,6 +204,14 @@
   .notice { display: flex; gap: var(--s3); align-items: flex-start; padding: var(--s4); border-radius: var(--r-sm); font-size: var(--fs-sub); }
   .notice.warn { background: var(--warn-soft); color: var(--text); }
   .notice.err { background: var(--err-soft); color: var(--text); }
+
+  .weeks-wrap { margin-top: var(--s5); overflow-x: auto; }
+  .weeks { width: 100%; border-collapse: collapse; font-size: var(--fs-sub); font-variant-numeric: tabular-nums; }
+  .weeks caption { text-align: left; font-size: var(--fs-caption); color: var(--text-3); padding-bottom: var(--s2); }
+  .weeks th, .weeks td { padding: var(--s2) var(--s3); text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .weeks th:first-child, .weeks td:first-child { text-align: left; padding-left: 0; }
+  .weeks thead th { font-weight: 500; color: var(--text-3); font-size: var(--fs-caption); }
+  .weeks .worse { color: var(--warn); font-weight: 600; }
   .notice .dot { margin-top: 7px; }
   .notice strong { display: block; font-weight: 600; }
 
@@ -304,6 +312,7 @@
     .segmented { width: 100%; }
     .run .btn { width: 100%; }
     .model-status .meta { display: none; }
+    .weeks th, .weeks td { padding-left: var(--s2); padding-right: 0; }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { transition: none !important; animation-duration: 1.5s !important; }
@@ -328,9 +337,9 @@
 
 <main class="container">
   <div class="intro">
-    <p class="eyebrow">휘발유 가격 예측 모델 운영</p>
+    <p class="eyebrow">경유 1~4주 평균가 예측 모델 운영</p>
     <h1 class="t-display">AIOps 대시보드</h1>
-    <p class="t-sub">배치를 보내 예측 오차를 측정합니다. 오차가 임계치를 넘으면 재학습, 배포 게이트, 서빙 교체까지 자동으로 이어집니다.</p>
+    <p class="t-sub">배치를 보내 주차별 예측 오차를 naive(마지막 날 가격 유지)와 비교합니다. 드리프트가 감지되면 재학습, 배포 게이트, 서빙 교체까지 자동으로 이어집니다.</p>
   </div>
 
   <!-- ================= 시뮬레이션 (primary) ================= -->
@@ -398,8 +407,7 @@
         </button>
         <div class="inline-status muted" id="upload-status" aria-live="polite"></div>
         <p class="t-caption">
-          필수 컬럼 <code>date, gasoline_price, crude_oil_price, usd_krw, tax_or_supply_feature</code> · 하루 간격 · 최소 41행.
-          연결 확인용 합성 데이터: <code>data/sample_gasoline_prices.csv</code>
+          필수 컬럼 <code>date, diesel_price, singapore_diesel_price, usd_krw, tax_or_supply_feature</code> · 하루 간격 · 최소 175행.
         </p>
       </div>
     </div>
@@ -425,26 +433,25 @@
 
 <script>
 /* ===================== 상수 ===================== */
-// 서버(data/features.py, monitoring/drift_detector.py)와 동일한 값 (상수만 복제)
-const SEQ_LEN = 20;
-const WINDOW_SIZE = 21;
-const RMSE_THRESHOLD = 10.0;
+// 서버(serving_app/schemas.py, serving_app/diesel_gate.py)와 동일한 값 (상수만 복제)
+const BATCH_MIN_ROWS = 175; // 입력 120 + 기준일 28 − 1 + 4주 정답 28
+const GATE_WEEK1_MAX = 50; // 배포 게이트 1주차 RMSE 한도 (드리프트 판정 기준과 별개)
 
 const NORMAL_SIGMA = 0.001;
 const DRIFT_SIGMA = NORMAL_SIGMA * 10;
 const DEFAULT_BASE_PRICE = 1700.0;
 const KIND_HELP = {
-  normal: `일 변동 ${NORMAL_SIGMA * 100}% 랜덤워크 ${SEQ_LEN + WINDOW_SIZE}행 · 오차가 임계치 안에 머무는지 확인`,
-  drift: `일 변동 ${DRIFT_SIGMA * 100}% 랜덤워크 ${SEQ_LEN + WINDOW_SIZE}행 · 재학습이 걸리면 수십 초 걸릴 수 있음`,
+  normal: `일 변동 ${NORMAL_SIGMA * 100}% 랜덤워크 ${BATCH_MIN_ROWS}일 · 기준일 28개의 1~4주 예측을 실제 평균과 비교`,
+  drift: `일 변동 ${DRIFT_SIGMA * 100}% 랜덤워크 ${BATCH_MIN_ROWS}일 · 재학습이 걸리면 수십 초 걸릴 수 있음`,
 };
 const PIPELINE_STAGES = [
   { key: "collect", title: "데이터 수집", desc: "요청 수신" },
   { key: "monitor", title: "모니터링", desc: "예측 기록 누적" },
-  { key: "detect", title: "드리프트 감지", desc: "RMSE vs 임계치" },
+  { key: "detect", title: "드리프트 감지", desc: "1주차 RMSE vs naive" },
   { key: "trigger", title: "재학습 트리거", desc: "조건 충족 시 시작" },
   { key: "train", title: "모델 학습", desc: "fine-tuning" },
-  { key: "register", title: "모델 등록", desc: "MLflow Registry" },
-  { key: "deploy", title: "배포", desc: "Production 승격" },
+  { key: "register", title: "배포 게이트", desc: `1주차 ≤ ${GATE_WEEK1_MAX}원 · naive · Production` },
+  { key: "deploy", title: "배포", desc: "champion 승격" },
   { key: "reload", title: "서빙 교체", desc: "reload_model" },
 ];
 const ICON_CHECK = `<svg class="i-check" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.2l2.2 2.2 4.8-4.9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -467,6 +474,8 @@ function randomWalk(n, base, sigma) {
   for (let i = 0; i < n; i++) { logPrice += randn() * sigma; prices.push(Math.exp(logPrice)); }
   return prices;
 }
+function isoDay(d) { return d.toISOString().slice(0, 10); }
+function mean(xs) { return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null; }
 function rmseOf(actual, predicted) {
   const n = Math.min(actual.length, predicted.length);
   if (n === 0) return null;
@@ -517,11 +526,12 @@ async function loadHealth() {
     $("model-dot").className = "dot err";
     $("model-version").textContent = "서버 응답 없음";
     $("model-meta").textContent = "";
-    return;
+    return null;
   }
   $("model-dot").className = data.model_loaded ? "dot ok" : "dot";
   $("model-version").textContent = data.model_loaded ? `모델 ${data.model_version}` : "모델 미로드";
   $("model-meta").textContent = `${data.model_source} · ${data.loading_mode}`;
+  return data;
 }
 
 /* ===================== 데이터 ===================== */
@@ -621,36 +631,43 @@ async function openLogFile(name) {
 }
 
 /* ===================== 파이프라인 ===================== */
-function pipelineStates(check) {
-  const triggered = check.status === "retrain_triggered";
-  if (triggered && check.promoted === true) {
-    return ["ok", "ok", "warn", "ok", "ok", "ok", "ok", check.reload?.reloaded ? "ok" : "warn"];
+// AIOps 상태별로 파이프라인이 멈춘 단계. 그 앞 단계는 완료, 뒤는 대기.
+const STOP_AT = {
+  ok: { at: 2, state: "ok", label: "기준 이내" },
+  insufficient_data: { at: 2, state: "warn", label: "데이터 부족" },
+  no_production: { at: 4, state: "warn", label: "Production 없음" },
+  retrain_failed: { at: 4, state: "warn", label: "학습 실패" },
+  gate_failed: { at: 5, state: "warn", label: "게이트 미통과" },
+};
+function pipelineSteps(check) {
+  let stop = STOP_AT[check.status];
+  if (check.promoted === true) {
+    const r = check.reload || {};
+    stop = { at: 7, state: r.reloaded ? "ok" : "warn", label: r.reloaded ? r.version : "교체 실패" };
   }
-  if (triggered && check.promoted === false) return ["ok", "ok", "warn", "ok", "ok", "warn", "idle", "idle"];
-  if (triggered) return ["ok", "ok", "warn", "idle", "idle", "idle", "idle", "idle"];
-  return ["ok", "ok", "ok", "idle", "idle", "idle", "idle", "idle"];
+  stop = stop || { at: 2, state: "warn", label: `알 수 없는 상태: ${check.status ?? "없음"}` };
+  return PIPELINE_STAGES.map((_, i) => {
+    if (i === stop.at) return { state: stop.state, label: stop.label };
+    if (i > stop.at) return { state: "idle", label: "대기" };
+    if (i === 2) return { state: "warn", label: "드리프트 감지" }; // 감지 단계를 지나쳤다 = 드리프트
+    return { state: "ok", label: "완료" };
+  });
 }
 function renderPipeline() {
   const meta = $("pipeline-meta");
-  let states = PIPELINE_STAGES.map(() => "idle");
-  let labels = PIPELINE_STAGES.map(() => "대기");
+  let steps = PIPELINE_STAGES.map(() => ({ state: "idle", label: "대기" }));
   if (lastPipelineRun) {
-    const check = lastPipelineRun.driftCheck;
-    states = pipelineStates(check);
-    const text = { ok: "완료", warn: "감지됨", idle: "대기" };
-    labels = states.map((s) => text[s]);
-    if (check.promoted === false) labels[5] = "게이트 미통과";
-    if (check.reload) labels[7] = check.reload.reloaded ? check.reload.version : "교체 실패";
+    steps = pipelineSteps(lastPipelineRun.driftCheck);
     meta.textContent = `마지막 실행 ${relTime(lastPipelineRun.ts)}`;
   } else {
     meta.textContent = "아직 실행 안 함";
   }
   $("stepper").innerHTML = PIPELINE_STAGES.map((s, i) => `
-    <li class="step ${states[i]}">
+    <li class="step ${steps[i].state}">
       <span class="marker">${ICON_CHECK}${ICON_ALERT}</span>
       <div class="step-title">${s.title}</div>
-      <div class="step-desc">${s.desc}</div>
-      <div class="step-status">${esc(labels[i])}</div>
+      <div class="step-desc">${esc(s.desc)}</div>
+      <div class="step-status">${esc(steps[i].label)}</div>
     </li>`).join("");
 }
 
@@ -658,33 +675,75 @@ function renderPipeline() {
 function selectedKind() {
   return document.querySelector('input[name="batch-kind"]:checked').value;
 }
-function summarize(check) {
-  const triggered = check.status === "retrain_triggered";
-  if (triggered && check.promoted && check.reload?.reloaded) {
-    return { level: "ok", title: "재학습 후 새 모델로 교체했습니다", sub: `${check.reload.version} 버전이 지금 서빙 중입니다.` };
-  }
-  if (triggered && check.promoted) {
+function reasonOf(check) {
+  return check.error || (check.reasons || []).join(", ");
+}
+// 정상(ok)과 알려진 실패 상태 외의 값은 정상으로 떨어뜨리지 않는다.
+function summarize(check, servingVersion) {
+  if (check.promoted === true) {
+    const r = check.reload || {};
+    if (r.reloaded && servingVersion === r.version) {
+      return { level: "ok", title: "재학습 후 새 모델로 교체했습니다", sub: `/health 확인: ${r.version} 버전이 지금 서빙 중입니다.` };
+    }
+    if (r.reloaded) {
+      return { level: "warn", title: "교체 응답과 서빙 중인 버전이 다릅니다",
+        sub: `교체 응답 ${r.version}, /health ${servingVersion ?? "응답 없음"}. 서버 로그를 확인하세요.` };
+    }
     return { level: "warn", title: "새 모델이 승격됐지만 서빙 교체에 실패했습니다",
-      sub: `기존 모델(${check.reload?.version ?? "알 수 없음"})을 계속 사용합니다. 원인: ${check.reload?.error ?? "알 수 없음"}` };
+      sub: `기존 모델(${r.version ?? "알 수 없음"})을 계속 사용합니다. 원인: ${r.error ?? "알 수 없음"}` };
   }
-  if (triggered && check.promoted === false) {
-    return { level: "warn", title: "드리프트를 감지해 재학습했지만 게이트를 통과하지 못했습니다", sub: "기존 모델을 그대로 유지합니다." };
-  }
-  if (triggered) return { level: "warn", title: "드리프트를 감지해 재학습을 시작했습니다", sub: "" };
-  return { level: "ok", title: "정상입니다", sub: `예측 오차가 임계치(${RMSE_THRESHOLD}원/L) 안에 있습니다.` };
+  const known = {
+    ok: { level: "ok", title: "정상입니다", sub: "드리프트 기준 이내라 재학습하지 않았습니다." },
+    gate_failed: { level: "warn", title: "재학습했지만 배포 게이트를 통과하지 못했습니다", sub: "기존 모델을 그대로 유지합니다." },
+    no_production: { level: "err", title: "Production 모델이 없어 재학습할 수 없습니다", sub: "먼저 base 모델을 학습·승격하세요." },
+    insufficient_data: { level: "warn", title: "데이터가 부족해 판정·재학습을 하지 못했습니다", sub: "" },
+    retrain_failed: { level: "err", title: "재학습 중 오류가 났습니다", sub: "기존 모델을 그대로 유지합니다." },
+  };
+  const s = known[check.status] || { level: "warn", title: "알 수 없는 AIOps 상태입니다", sub: `status: ${check.status ?? "없음"}` };
+  const reason = reasonOf(check);
+  return reason ? { ...s, sub: `${s.sub} 사유: ${reason}`.trim() } : s;
 }
 
-function renderResult(data, clientRmse) {
+// 기준일별 짝({predicted[4], actual[4], naive})에서 주차별 평균·RMSE를 계산한다.
+function weeklyStats(pairs) {
+  return [0, 1, 2, 3].map((k) => {
+    const actual = pairs.map((p) => p.actual[k]);
+    const predicted = pairs.map((p) => p.predicted[k]);
+    return {
+      week: k + 1,
+      actual: mean(actual),
+      predicted: mean(predicted),
+      rmse: rmseOf(actual, predicted),
+      naive: rmseOf(actual, pairs.map((p) => p.naive)),
+    };
+  });
+}
+
+function renderResult(data, servingVersion) {
   const check = data.drift_check || {};
-  const s = summarize(check);
-  const version = check.reload?.reloaded ? check.reload.version : ($("model-version").textContent.replace(/^모델 /, "") || "–");
+  const s = summarize(check, servingVersion);
+  const pairs = data.predictions || [];
+  const weeks = weeklyStats(pairs);
+  const w1 = weeks[0];
   const metrics = [
-    `<div class="metric"><dt>예측 오차 RMSE</dt><dd>${fmt(clientRmse)}<small>원/L</small></dd></div>`,
-    `<div class="metric"><dt>임계치</dt><dd>${fmt(RMSE_THRESHOLD, 0)}<small>원/L</small></dd></div>`,
+    `<div class="metric"><dt>1주차 예측 RMSE</dt><dd>${fmt(w1.rmse)}<small>원/L</small></dd></div>`,
+    `<div class="metric"><dt>1주차 naive RMSE</dt><dd>${fmt(w1.naive)}<small>원/L</small></dd></div>`,
   ];
-  // 재학습 결과 RMSE는 재학습이 일어났을 때만 서버가 준다
-  if (typeof check.rmse === "number") metrics.push(`<div class="metric"><dt>재학습 모델 RMSE</dt><dd>${fmt(check.rmse)}<small>원/L</small></dd></div>`);
-  metrics.push(`<div class="metric"><dt>서빙 모델</dt><dd class="is-text">${esc(version)}</dd></div>`);
+  // 재학습 모델의 검증 RMSE(1~4주 배열)는 재학습이 일어났을 때만 서버가 준다. 배포 게이트 한도와 비교.
+  const retrained = check.promoted === true || check.status === "gate_failed";
+  if (retrained && Array.isArray(check.rmse)) {
+    metrics.push(`<div class="metric"><dt>재학습 모델 1주차 RMSE (게이트 ≤ ${GATE_WEEK1_MAX})</dt><dd>${fmt(check.rmse[0])}<small>원/L</small></dd></div>`);
+  }
+  metrics.push(`<div class="metric"><dt>서빙 모델</dt><dd class="is-text">${esc(servingVersion ?? "–")}</dd></div>`);
+  const rows = weeks.map((w) => `
+    <tr>
+      <td>${w.week}주차</td>
+      <td>${fmt(w.actual)}</td>
+      <td>${fmt(w.predicted)}</td>
+      <td class="${w.rmse > w.naive ? "worse" : ""}">${fmt(w.rmse)}</td>
+      <td>${fmt(w.naive)}</td>
+    </tr>`).join("");
+  const span = pairs.length ? `${pairs[0].date} ~ ${pairs[pairs.length - 1].date}` : "";
   $("result").innerHTML = `
     <div class="result-status">
       <span class="dot ${s.level}"></span>
@@ -694,6 +753,13 @@ function renderResult(data, clientRmse) {
       </div>
     </div>
     <dl class="metrics" style="--cols: ${metrics.length}">${metrics.join("")}</dl>
+    <div class="weeks-wrap">
+      <table class="weeks">
+        <caption>기준일 ${pairs.length}개(${esc(span)})의 주차별 평균가와 오차 · 원/L · naive보다 나쁜 값은 주황색</caption>
+        <thead><tr><th scope="col">주차</th><th scope="col">실제 평균</th><th scope="col">예측 평균</th><th scope="col">예측 RMSE</th><th scope="col">naive RMSE</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
     ${rawDetails(data)}`;
 }
 
@@ -710,25 +776,34 @@ function renderError(status, data) {
     ${rawDetails({ status, detail: data })}`;
 }
 
+// 어제까지 BATCH_MIN_ROWS일, 하루 간격 경유 행 (국제가·환율은 고정)
+function makeRows(prices) {
+  const first = new Date();
+  first.setUTCHours(0, 0, 0, 0);
+  first.setUTCDate(first.getUTCDate() - prices.length);
+  return prices.map((diesel_price, i) => {
+    const d = new Date(first);
+    d.setUTCDate(first.getUTCDate() + i);
+    return { date: isoDay(d), diesel_price, singapore_diesel_price: 90, usd_krw: 1400, tax_or_supply_feature: 0 };
+  });
+}
+
 async function sendBatch() {
   const kind = selectedKind();
   const btn = $("send-btn");
-  const n = SEQ_LEN + WINDOW_SIZE;
-  const prices = randomWalk(n, DEFAULT_BASE_PRICE, kind === "drift" ? DRIFT_SIGMA : NORMAL_SIGMA);
+  const prices = randomWalk(BATCH_MIN_ROWS, DEFAULT_BASE_PRICE, kind === "drift" ? DRIFT_SIGMA : NORMAL_SIGMA);
   setBusy(btn, true, "전송 중…");
   try {
     const res = await fetch("/predict/batch-test", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rows: prices.map((gasoline_price) => ({ gasoline_price, crude_oil_price: 75, usd_krw: 1350, tax_or_supply_feature: 0 })) }),
+      body: JSON.stringify({ rows: makeRows(prices) }),
     });
     const data = await safeJson(res);
     if (!res.ok) { renderError(res.status, data); return; }
-    const actual = prices.slice(SEQ_LEN);
-    const clientRmse = rmseOf(actual, data.predictions || []);
     lastPipelineRun = { driftCheck: data.drift_check || {}, ts: Date.now() / 1000 };
-    await loadHealth();
-    renderResult(data, clientRmse);
+    const health = await loadHealth(); // 교체 성공은 /health의 실제 버전으로 다시 확인한다
+    renderResult(data, health?.model_version ?? null);
     renderPipeline();
     loadLogFiles();
   } catch (e) {
