@@ -101,3 +101,38 @@ D일 행에는 **D일 예측 시점에 이미 공개된 값**만 들어갑니다
 | `crude_oil_price` | 두바이유 현물 가격, D-1일까지 공개된 값 | USD/bbl | 오피넷 |
 | `usd_krw` | 원/미국달러 매매기준율, D일까지 고시된 값 | KRW/USD | 한국은행 ECOS |
 | `tax_or_supply_feature` | 휘발유 유류세 인하율 | % (0~37) | 기획재정부 고시 기반 구간표 |
+
+## 경유 전환 제안 (#24~#27)
+
+팀의 기존 `main` 계약과 API는 아직 휘발유입니다. 다음 경유 경로는 데이터 담당 검토용이며,
+`diesel_features.csv`를 기존 `/data/upload`에 올리면 `gasoline_price` 컬럼 검사에 실패합니다.
+PM과 모델·서빙·AIOps 담당이 공통 계약과 품질 게이트를 확정한 뒤 서비스 전환을 진행합니다.
+
+| 항목 | 경유 데이터 계약 |
+|---|---|
+| 오피넷 원본 | 주유소 → 평균판매가격 → 제품별 → 일간 → **자동차용경유** 선택, CSV저장 |
+| 원본 형식 | CP949 또는 UTF-8, `구분,자동차용경유` (선택한 제품만 내려받으면 2열) |
+| 목표/단위 | `diesel_price`, 전국 평균 자동차용경유 가격, 원/L |
+| 최종 컬럼 순서 | `date,diesel_price,crude_oil_price,usd_krw,tax_or_supply_feature` |
+| 경유 유류세 피처 | 경유 기본 탄력세율 375원/L 대비 인하율(%), 소수 첫째 자리 |
+| 원본 보존 | `data/raw/`에 보관, 이용 조건 확인 전 Git 커밋 금지 |
+
+경유 원본만 확인하려면:
+
+```bash
+.venv/bin/python -c 'from data.opinet import load_opinet_diesel; import sys; rows=load_opinet_diesel(sys.argv[1]); print(len(rows), rows[0], rows[-1])' data/raw/opinet_diesel.csv
+```
+
+기존 두바이유(`$` 단위)와 ECOS 환율 원본이 준비되면 아래처럼 합칩니다. 두바이유는 D-1일까지,
+환율은 D일까지 공개된 최근 거래일 값을 사용하며, 경유 정책값은 D일 시행값을 사용합니다.
+
+```bash
+.venv/bin/python -m data.build_diesel_dataset
+# 입력: data/raw/opinet_diesel.csv, opinet_crude.csv, ecos_usdkrw.csv
+# 출력: data/processed/diesel_features.csv (실측 원본/가공본은 커밋하지 않음)
+```
+
+경유 유류세 원본은 [교통·에너지·환경세법 시행령 제정·개정이유](https://law.go.kr/LSW/lsRvsRsnListP.do?chrClsCd=010202&lsId=002619&lsRvsGubun=all)입니다.
+`data/reference/diesel_fuel_tax_cut.csv`에 시행 구간별 **경유** 탄력세율(원/L)과 법령 번호를 기록하고
+`(1 - 탄력세율 / 375) × 100`을 소수 첫째 자리로 반올림한 값을 피처로 사용합니다. 휘발유 표와 혼용하지 않습니다.
+구간표 밖의 날짜는 추정하지 않고 오류로 처리합니다.

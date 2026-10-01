@@ -1,5 +1,5 @@
 """
-외부 피처(국제유가·환율·유류세 인하율)를 휘발유 날짜에 맞춰 붙이는 모듈.
+외부 피처(국제유가·환율·유류세 인하율)를 가격 날짜에 맞춰 붙이는 모듈.
 
 핵심 원칙은 "D일 입력에는 D일 예측 시점에 이미 공개된 값만 쓴다"입니다.
 국제유가·환율은 거래일에만 값이 있으므로, 각 D일에 대해 공개 시점(lag)을 지난 가장
@@ -8,7 +8,7 @@
     crude_oil_price : 오피넷 두바이유 현물(USD/bbl). 싱가포르 장 마감 기준이라 같은 날
                       국내 가격 집계보다 늦게 공개될 수 있어 1일 지연(D-1까지)만 사용.
     usd_krw         : 한국은행 ECOS 원/미국달러 매매기준율. D일 오전 고시되므로 D일 값 사용.
-    tax_or_supply_feature : 휘발유 유류세 인하율(%). 시행일이 사전 고시되는 정책값.
+    tax_or_supply_feature : 선택한 제품의 유류세 인하율(%). 시행일이 사전 고시되는 정책값.
                       공급 차질은 일별 관측 지표가 없어 피처에서 제외하고 드리프트 시나리오로만 다룬다.
 """
 
@@ -24,14 +24,21 @@ FX_LAG_DAYS = 0
 # 설·추석 연휴에도 국제유가·환율 공백은 일주일을 넘지 않는다. 넘으면 원본 누락으로 본다.
 MAX_STALE_DAYS = 7
 TAX_POLICY_PATH = "data/reference/gasoline_fuel_tax_cut.csv"
+MAX_CRUDE_USD_PER_BBL = 300
 
 
 def load_opinet_crude(path: str, column: str = CRUDE_COLUMN) -> list[tuple[date, float]]:
-    """오피넷 '유가관련정보 > 국제유가 > 원유' CSV저장($ 단위) -> [(날짜, USD/bbl)]."""
-    series = parse_series(read_csv_text(path), "기간", column)
+    """오피넷 두바이유($ 단위). 휴장일의 빈 관측값은 건너뛴다."""
+    rows = [row for row in read_csv_text(path) if str(row.get(column) or "").strip()]
+    series = parse_series(rows, "기간", column)
     for day, price in series:
         if price <= 0:
             raise ValueError(f"{day} 국제유가가 양수가 아닙니다: {price}")
+        if price > MAX_CRUDE_USD_PER_BBL:
+            raise ValueError(
+                f"{day} 국제유가 {price}는 USD/bbl로 보기 어렵습니다. "
+                "오피넷 화면의 단위를 `$`로 두고 다시 저장하세요 (`원`은 원/L)"
+            )
     return series
 
 

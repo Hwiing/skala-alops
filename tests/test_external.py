@@ -51,6 +51,14 @@ def test_crude_uses_previous_trading_day_only(tmp_path):
     assert asof_values(days, crude, lag_days=1) == [77.0, 76.0, 76.0, 76.0, 78.0]
 
 
+def test_crude_skips_closed_market_blank_and_rejects_wrong_unit(tmp_path):
+    blank = "기간,Dubai\r\n26년09월28일,95.0\r\n26년09월29일,\r\n26년09월30일,96.0\r\n"
+    assert len(load_opinet_crude(write(tmp_path, "blank.csv", blank))) == 2
+    wrong_unit = "기간,Dubai\r\n26년09월28일,818.38\r\n"
+    with pytest.raises(ValueError, match="USD/bbl"):
+        load_opinet_crude(write(tmp_path, "wrong.csv", wrong_unit))
+
+
 def test_fx_uses_same_day_and_carries_weekend_forward(tmp_path):
     fx = load_usd_krw(write(tmp_path, "fx.csv", FX_CSV, "utf-8"))
     days = [D("2023-01-06"), D("2023-01-07"), D("2023-01-08"), D("2023-01-09")]
