@@ -119,7 +119,7 @@ class DailyFrame:
             if self.binding[i]:  # 상한(세후)에 묶이면 세금 변화 무관 → 현재가 + 발표된 상한 변화
                 out.append(self.price[i] + sum(self.caps.retail_change(u, today) for u in days) / 7)
                 continue
-            tax_path = sum(1.1 * self.taxes.retail_tax(u) for u in days) / 7
+            tax_path = sum(1.1 * self.taxes.retail_tax(u, today) for u in days) / 7  # 발표된 변경만
             level = self.pre_tax[i] + change[k] + tax_path
             known = [v for v in (self.caps.known_cap(u, today) for u in days) if v is not None]
             if known and self.margin[i] is not None:  # 상한 + 최근 마진을 넘는 예측은 자른다

@@ -17,6 +17,8 @@ from bisect import bisect_right
 from datetime import date
 
 TAX_PATH = "data/reference/diesel_fuel_tax_cut.csv"
+# 세율 변경 발표일 (시행일 → 처음 공식 발표일). 세금표는 데이터 담당과 공유하므로 발표일은 따로 둔다.
+TAX_ANNOUNCED_PATH = "data/reference/diesel_tax_announced.csv"
 CAP_PATH = "data/reference/price_cap.csv"
 EDUCATION_TAX = 0.15
 # (시행일, 주행세율): 2008-03-10 32.5%→27%, 2008-10-07 →30%, 2009-05-21 →26%(2011년부터 자동차세 주행분)
@@ -49,10 +51,18 @@ def pass_ratio(days_since: int) -> float:
 class TaxSchedule:
     """유류세 구간표. tax(day) = 그날 시행 세액, retail_tax(day) = 시차를 반영해 소매가에 들어간 세액."""
 
-    def __init__(self, path: str = TAX_PATH):
+    def __init__(self, path: str = TAX_PATH, announced_path: str | None = TAX_ANNOUNCED_PATH):
         with open(path, encoding="utf-8-sig") as f:
             rows = sorted(csv.DictReader(f), key=lambda r: r["start_date"])
         self.starts = [_day(r["start_date"]) for r in rows]
+        announced = {}
+        if announced_path:
+            with open(announced_path, encoding="utf-8-sig") as f:
+                announced = {
+                    _day(r["start_date"]): _day(r["announced_date"]) for r in csv.DictReader(f)
+                }
+        # 발표일이 없으면 시행일에 알려진 것으로 본다
+        self.announced = [announced.get(d, d) for d in self.starts]
         self.values = [
             float(r["flexible_tax_krw_per_l"])
             * (1 + EDUCATION_TAX + driving_rate(_day(r["start_date"])))
@@ -65,14 +75,19 @@ class TaxSchedule:
             raise ValueError(f"유류세 표에 {day} 이전 구간이 없습니다")
         return self.values[i]
 
-    def retail_tax(self, day) -> float:
+    def retail_tax(self, day, as_of=None) -> float:
+        """day의 소매가에 들어간 세액. as_of를 주면 그날까지 발표된 변경만 반영한다(미발표 변경은 현재 세율 유지)."""
         day = _day(day)
+        as_of = _day(as_of) if as_of is not None else None
         i = bisect_right(self.starts, day) - 1
         if i < 0:
             raise ValueError(f"유류세 표에 {day} 이전 구간이 없습니다")
-        value = self.values[0]
+        value = prev = self.values[0]
         for j in range(1, i + 1):
-            value += (self.values[j] - self.values[j - 1]) * pass_ratio((day - self.starts[j]).days)
+            if as_of is not None and self.announced[j] > as_of:
+                continue
+            value += (self.values[j] - prev) * pass_ratio((day - self.starts[j]).days)
+            prev = self.values[j]
         return value
 
 

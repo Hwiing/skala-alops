@@ -47,6 +47,15 @@ def test_pass_ratio_and_lagged_retail_tax():
     assert taxes.retail_tax("2018-11-20") == pytest.approx(after)
 
 
+def test_tax_change_known_only_after_announcement():
+    taxes = TaxSchedule()
+    before, after = taxes.tax("2026-03-26"), taxes.tax("2026-03-27")
+    # 2026-03-27 인하(25%)는 3/26 발표 → 3/25 시점 예측은 기존 세율이 이어진다고 본다
+    assert taxes.retail_tax("2026-04-20", as_of="2026-03-25") == pytest.approx(before)
+    assert taxes.retail_tax("2026-04-20", as_of="2026-03-26") == pytest.approx(after)
+    assert taxes.retail_tax("2026-04-20") == pytest.approx(after)  # as_of 없으면 실제 시행 기준
+
+
 def test_cap_known_only_after_announcement():
     caps = CapSchedule()
     assert caps.cap("2026-03-12") is None
