@@ -30,11 +30,14 @@ def test_non_finite_values_fail(bad):
     assert not check_gate([27.0, 53.0, 68.0, 76.0], NAIVE, [bad, 1.0, 1.0, 1.0])["passed"]
 
 
-def test_production_comparison_on_week1():
-    model = [27.0, 53.0, 68.0, 76.0]
-    assert check_gate(model, NAIVE, [27.0, 50.0, 60.0, 70.0])["passed"]  # 동점은 교체 허용
-    worse = check_gate(model, NAIVE, [26.9, 50.0, 60.0, 70.0])
-    assert worse == {"passed": False, "reasons": ["1주차 RMSE 27.00 > Production 26.90"]}
+def test_production_comparison_on_mean_of_weeks():
+    model = [27.0, 53.0, 68.0, 76.0]  # 평균 56.0
+    assert check_gate(model, NAIVE, [28.0, 52.0, 68.0, 76.0])["passed"]  # 평균 동점은 교체 허용
+    # 1주차가 Production보다 나빠도 평균이 좋으면 통과 (한 주차 운에 흔들리지 않게)
+    assert check_gate(model, NAIVE, [26.0, 55.0, 70.0, 78.0])["passed"]
+    worse = check_gate(model, NAIVE, [27.0, 53.0, 68.0, 75.6])
+    assert worse == {"passed": False, "reasons": ["1~4주 평균 RMSE 56.00 > Production 55.90"]}
+    assert not check_gate(model, NAIVE, [27.0, 53.0])["passed"]
 
 
 def test_empty_or_mismatched_inputs_fail():

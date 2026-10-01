@@ -131,8 +131,8 @@ def log_and_gate(forecaster, frame, val_idx, meta: dict, run_name: str) -> dict:
         )
         for k, (m, n) in enumerate(zip(meta["rmse"], meta["naive_rmse"]), start=1):
             mlflow.log_metrics({f"rmse_w{k}": m, f"naive_rmse_w{k}": n})
-        if production_rmse:
-            mlflow.log_metric("production_rmse_w1", production_rmse[0])
+        for k, v in enumerate(production_rmse or [], start=1):
+            mlflow.log_metric(f"production_rmse_w{k}", v)
         mlflow.set_tags(
             {
                 "gate": "passed" if gate["passed"] else "failed",
