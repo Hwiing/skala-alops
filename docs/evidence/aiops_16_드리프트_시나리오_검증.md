@@ -79,7 +79,53 @@ naive 비교 방식의 한계이며, 급변기 직후 평온기에 다시 판정
 - 웹훅이 500이어도 배치 응답은 200, 재학습 결과는 그대로 반환된다.
 - 같은 판정으로는 재학습·알림 모두 반복되지 않는다 (재학습: 이전 결과 재사용 + `reasons`에 "같은 판정은 재학습하지 않음", 알림: 같은 상태·버전·기간 3600초 억제 - `tests/test_notifier.py`).
 
+## 결과 4: 실모델·실측 데이터 재현 (MLflow champion, 실제 fine_tune)
+
+스텁이 아니라 실제 경로로 전체 루프를 돌렸습니다. `diesel_registry.train_and_register` → MLflow `DieselPricePredictor` v1(champion) →
+`MODEL_SOURCE=mlflow` 서빙 → 실측 CSV 구간 재전송(`--replay-csv`) → 실제 `fine_tune(최근 627행)` → 게이트 → 알림(mock webhook).
+
+```bash
+python -m serving_app.diesel_registry --csv data/processed/diesel_features_2008_spliced.csv   # v1 champion
+MODEL_SOURCE=mlflow LOADING_MODE=eager AIOPS_ALERT_WEBHOOK_URL=http://127.0.0.1:9019 uvicorn serving_app.main:app --port 8011
+python scripts/simulate_drift.py --url http://127.0.0.1:8011/predict/batch-test \
+  --replay-csv data/processed/diesel_features_2008_spliced.csv --replay-end 2026-02-25 2026-07-28 2026-07-28
+```
+
+모델 v1: 학습 타깃 ~2025-08-05, 검증 2025-09 ~ 2026-09 1주차 RMSE 27.6원 (naive 28.8원) - 게이트 통과.
+
+| 재현 구간 (기준일) | 판정 | 1주차 RMSE | naive RMSE | 조치 |
+|---|---|---|---|---|
+| 2026-01-01 ~ 01-28 | ok | 1.77 | 7.13 | - |
+| 2026-06-03 ~ 06-30 | **drift** | 26.95 | 25.49 | 실제 fine_tune → **gate_failed**, champion:1 유지 |
+| 같은 구간 재전송 | drift | 26.95 | 25.49 | 재학습 없이 이전 결과 재사용 |
+
+```
+[WARN] drift detected (week1_rmse=26.95 > naive_rmse=25.49, n=28, period=2026-06-03~2026-06-30, model=champion:1)
+[INFO] retrain triggered (rows=627, data=2025-01-12~2026-09-30)
+[GATE_FAILED] new_rmse=[16.09, 14.91, 25.70, 41.00] - 1주차 RMSE 16.09 >= naive 15.50; 1~4주 평균 RMSE 24.42 > Production 24.16 (Production 유지)
+[ALERT] [AIOps WARN] gate_failed | ... | 조치: 기존 Production 유지: 1주차 RMSE 16.09 >= naive 15.50; ...
+[WARN] drift detected (... 같은 판정 ...)
+[INFO] retrain skipped - already attempted for period=2026-06-03~2026-06-30
+```
+
+추가 재현 (오래된 모델 v1: 학습 타깃 ~2024-01-04, 별도 MLflow DB)
+- 2025-05 ~ 2026-01 네 구간: 모두 ok. 2025-05는 모델 2.57 vs naive 1.97로 naive보다 나쁘지만 하한 10원 이하라 ok (하한 효과 확인).
+- 2026-03-10 ~ 04-06 (최고가격제 직후): drift (45.21 vs 40.60) → 실제 fine_tune(데이터 ~2026-05-04) → gate_failed
+  (1주차 52.52 > 50, 2·3주차 naive보다 나쁨) → Production 유지·알림.
+
+### 실제 실행에서 발견한 것
+
+1. **MLflow 버전 번호 타입 버그 (main `diesel_registry.py`)** - MLflow 3.16은 `ModelVersion.version`을 `int`로 돌려준다.
+   `fine_tune()`의 `FineTuneResult(production_before=1)`이 문자열 검증에 걸려 **Production이 있으면 재학습이 항상 실패**했다.
+   AIOps는 이를 `retrain_failed`로 받아 Production 유지·운영자 알림까지 정상 처리했다 (실패 복구 경로 실증).
+   `production_version()`과 승격 `version`을 `str()`로 바꾸면 해결된다 - 별도 수정 PR로 제안.
+2. **fine-tuning 효과가 거의 없음 (#11 참고)** - 세 번 모두 재학습 모델의 1~4주 평균 RMSE가 Production과 0.01~0.3원 차이
+   (24.42 vs 24.16, 11.43 vs 11.42, 115.96 vs 115.92). lr 1e-4 · 10 epoch warm start로는 가중치가 거의 움직이지 않아
+   "평균 ≤ Production" 조건에서 근소하게 탈락한다. 승격이 사실상 일어나지 않으므로 학습률·epoch 조정 검토가 필요하다.
+3. **2026 충격기에는 재학습해도 naive를 못 이긴다** - `docs/evidence/06`과 같은 결론. 이 경우 게이트가 기존 모델을 지키는 것이 맞는 동작이다.
+
 ## 한계와 다음 단계
 
-- 스텁 모델·가짜 fine_tune 결과다. 실모델로 결과 1·2 표를 다시 채워야 판정 기준(28건·naive 비교)의 근거가 된다 (#15 남은 항목).
+- 결과 1~3은 스텁 모델·가짜 fine_tune 결과다. 실모델 경로는 결과 4, 판정 기준 근거는 `aiops_15_판정기준_백테스트.md`.
+- 실모델로는 승격·서빙 교체까지 간 사례가 없다 (위 2·3). 교체 경로는 스텁 E2E·HTTP 통합 테스트와 #34의 실제 pyfunc 교체 검증으로 확인했다.
 - batch_test가 내부 예측 윈도우에 서빙 모델 버전을 함께 기록하므로, 승격·교체 후 새 모델(champion:4)은 이전 모델 오차와 섞이지 않고 따로 판정된다.
