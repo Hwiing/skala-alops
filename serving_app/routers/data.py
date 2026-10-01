@@ -15,14 +15,16 @@ from uuid import uuid4
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
-from data.features import FEATURE_COLUMNS, SEQ_LEN, load_rows, validate_rows
+from data.features import FEATURE_COLUMNS, load_rows, validate_rows
 from data.storage import UPLOAD_DIR, latest_upload
-from serving_app.monitoring.drift_detector import WINDOW_SIZE
+from serving_app.schemas import BATCH_MIN_ROWS
 
 router = APIRouter(prefix="/data")
 
 REQUIRED_COLUMNS = {"date", *FEATURE_COLUMNS}
-MIN_ROWS = SEQ_LEN + WINDOW_SIZE  # 시퀀스 구성 + 드리프트 판정 윈도우에 필요한 최소 행 수
+MIN_ROWS = (
+    BATCH_MIN_ROWS  # 배치 시뮬레이션 1회(입력 120 + 짝 28 − 1 + 4주 정답 28)에 필요한 최소 행 수
+)
 
 
 @router.post("/upload")
@@ -46,7 +48,7 @@ async def upload(file: UploadFile = File(...)):
         raise HTTPException(400, f"CSV 데이터 검증 실패: {exc}") from exc
 
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-    dest = os.path.join(UPLOAD_DIR, f"gasoline_{uuid4().hex}.csv")
+    dest = os.path.join(UPLOAD_DIR, f"diesel_{uuid4().hex}.csv")
     with open(dest, "w", encoding="utf-8", newline="") as f:
         f.write(text)
 

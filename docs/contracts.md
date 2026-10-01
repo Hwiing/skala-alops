@@ -55,17 +55,18 @@ CSV 업로드 최소 41행은 시뮬레이션 21건 확보 기준이며 충분�
 |---|---|---|---|
 | GET | `/` | 원본 기반 대시보드 | 동작 |
 | GET | `/health` | `status`, `model_loaded`, `model_version`, `model_source`, `loading_mode` | `status`는 프로세스 생존; readiness는 `model_loaded` (lazy는 첫 예측 전 false) |
-| POST | `/data/upload` | multipart CSV → `filename`, `rows` | 검증·저장, 오류 400 |
+| POST | `/data/upload` | multipart CSV(최소 175행) → `filename`, `rows` | 검증·저장, 오류 400 |
 | GET | `/data/status` | 데이터 기간·행 수·`min_price`·`max_price` | 데이터 없으면 `exists:false` |
-| POST | `/predict` | `sequence` → `predicted_price`, `model_version` | 모델 필요, 입력 422, 미준비 503 |
-| POST | `/predict/batch-test` | `rows` 21개 이상 → `predictions`, `drift_check` | TODO, 현재 501 |
+| POST | `/predict` | `sequence` 120일(`date` 포함, 하루 간격) → `predictions`(1~4주 `horizon_week`·`start_date`·`end_date`·`predicted_avg_price`), `base_date`, `model_version` | v2. 모델 필요, 입력·날짜 중복/누락 422, 미준비 503 |
+| POST | `/predict/batch-test` | `rows` 175개 이상 → `predictions`(기준일별 `{date, predicted[4], actual[4], naive}`), `drift_check` | v2. AIOps 판정 TODO면 501 |
 | GET | `/logs` | 로그 목록 | 원본 재사용 |
 | GET | `/logs/{filename}` | `name`, `content` | 원본 재사용, 없는 파일 404 |
 
 전체 예측 요청 예시는 [`examples/predict.json`](../examples/predict.json).
 배치의 `rows`는 DailyPoint 전체 피처를 포함합니다. 원본 `prices` 전용 계약은 사용하지 않습니다.
-배치에서 `rows[i:i+20]`으로 예측하고 `rows[i+20].diesel_price`를 실제값으로 사용합니다.
-응답 `model_version`은 로컬 `v1-local`; MLflow 구현 후 `production:<실제 등록 버전>`으로 식별합니다.
+배치는 `rows[i:i+120]`으로 예측하고, 기준일(마지막 입력일) 뒤 k주 실제 평균을 `actual`로 붙입니다. 최근 28건만 유지합니다.
+응답 `model_version`은 로컬 `local`, MLflow는 `champion:<등록 버전>`입니다.
+승격 후 교체는 AIOps 결과의 `version`이 `champion`으로 실제 로드됐을 때만 성공(`reloaded: true`)이며 그때만 예측 기록을 비웁니다. local 모드·버전 없음·불일치·로드 실패는 기존 모델과 기록을 유지합니다.
 
 ### 모델·운영
 

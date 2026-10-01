@@ -31,9 +31,9 @@ def compute_baseline_stats(csv_path: str | None = None) -> tuple[float, float]:
     return float(closes.mean()), float(closes.std())
 
 
-# SEQ_LEN(20) + WINDOW_SIZE(21) = 41개를 보내야 배치 하나당 정확히 WINDOW_SIZE(21)개의
-# (predicted, actual) 쌍이 쌓여, drift_detector.py가 바로 판정할 수 있다.
-BATCH_N = 41
+# 입력 120 + 짝 28 − 1 + 4주 정답 28 = 175개를 보내야 배치 하나당 기준일 28개의
+# {date, predicted[4], actual[4], naive} 짝이 쌓인다 (serving_app/schemas.py BATCH_MIN_ROWS).
+BATCH_N = 175
 
 # 학습 데이터(합성 데모; 실측 변동성 교체 TODO)는 추세·모멘텀이 있는 시계열이라, 평균 주변의 순수
 # 백색잡음(iid noise)을 넣으면 "정상" 입력조차 모델이 못 맞춰 오탐(false positive)이
@@ -59,7 +59,7 @@ def generate_drift_batch(n=BATCH_N, base=1700.0, sigma=DRIFT_SIGMA):
 
 
 def send_batch(prices: np.ndarray, label: str) -> dict:
-    # TODO(kchanis1223): 4개 피처를 가진 rows 생성 후 POST(API_URL, json={"rows": rows}, timeout=...).
+    # TODO(kchanis1223): date + 4개 피처를 가진 rows(하루 간격) 생성 후 POST(API_URL, json={"rows": rows}, timeout=...).
     # 국제유가/환율 급변 및 정책 시나리오를 분리하고 응답 상태와 drift_check를 출력.
     # prices만 보내는 HAIC 계약은 사용하지 않는다. 실측 기반 정상 변동성 보정 필요.
     raise NotImplementedError("send_batch: 4피처 시나리오와 배치 요청 구현 필요")

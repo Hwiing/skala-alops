@@ -6,14 +6,11 @@ Day1 실습 목표: Lazy Loading vs Eager Loading 두 방식을 직접 구현하
 LSTM은 로컬 pickle 모델보다 로딩 자체가 무거워서, 이 비교가 Day1보다 오히려
 더 체감됩니다.
 
-Day2 실습 목표: MODEL_SOURCE=mlflow 로 전환해, 로컬 .keras 파일 대신
-MLflow Model Registry의 Production 버전을 로드하도록 확장합니다.
-main.py / train_and_register.py 코드는 그대로 두고 이 파일만 손대면 되도록
-설계되어 있습니다 - 이것이 "조립 블록" 구조입니다.
+Day2 실습 목표: MODEL_SOURCE=mlflow 로 전환해, 로컬 pyfunc 폴더 대신
+MLflow Model Registry의 champion alias 버전을 로드하도록 확장합니다.
 
-스케일러(scaler.pkl)는 Day1~3 내내 동일한 파일을 그대로 재사용합니다
-(MODEL_SOURCE와 무관하게 항상 로컬 파일에서 로드) - 정규화 기준이 바뀌면
-이미 그 기준으로 학습된 가중치와 어긋나기 때문입니다.
+경유 모델(contracts.md v2)은 pyfunc 하나에 LSTM·scaler·정책 규칙이 모두 들어 있어
+서빙은 최근 120일 행을 넘기고 1~4주 평균가 4개를 받기만 합니다.
 
 환경변수
     LOADING_MODE = lazy(기본값) | eager
@@ -25,68 +22,60 @@ import os
 import threading
 import time
 
-from data.features import GasolineScaler
-
-LOCAL_MODEL_PATH = "serving_app/models/gasoline_v1.keras"
-SCALER_PATH = "serving_app/models/scaler.pkl"
-MODEL_NAME = "DieselPricePredictor"  # #28 경유 전환
+LOCAL_PYFUNC_PATH = "serving_app/models/diesel_pyfunc"
+MODEL_NAME = "DieselPricePredictor"
+ALIAS = "champion"
 
 _model_cache = None  # Lazy Loading 캐시
 _reload_lock = threading.Lock()
 
 
 class LoadedModel:
-    """local .keras와 mlflow 두 소스를 동일한 인터페이스로 감싸는 래퍼."""
+    """local 폴더와 mlflow 레지스트리 pyfunc를 같은 인터페이스로 감싸는 래퍼.
 
-    def __init__(self, keras_model, scaler: GasolineScaler, version: str):
-        self._keras_model = keras_model
-        self.scaler = scaler
+    registry_version: 레지스트리 버전 번호(local은 None). 승격 버전이 실제로 올라왔는지 확인할 때 쓴다.
+    """
+
+    def __init__(self, pyfunc, version: str, registry_version: str | None = None):
+        self._pyfunc = pyfunc
         self.version = version
+        self.registry_version = registry_version
 
-    def predict_one(self, sequence: list[dict]) -> float:
-        """
-        sequence: [{"diesel_price": ..., "singapore_diesel_price": ..., "usd_krw": ..., "tax_or_supply_feature": ...}, ...] 길이 SEQ_LEN, 오래된 날 -> 최근 날 순서.
-        """
-        import numpy as np
+    def predict(self, rows: list[dict]) -> list[float]:
+        """rows: 최근 120일 {date, diesel_price, ...}, 오래된 날 -> 최근 날. 반환: 1~4주 평균가 4개."""
+        import pandas as pd
 
-        scaled = [self.scaler.transform_point(p) for p in sequence]
-        x = np.array([scaled], dtype="float32")  # (1, SEQ_LEN, 4)
-        pred_scaled = float(self._keras_model.predict(x, verbose=0)[0][0])
-        return self.scaler.inverse_price(pred_scaled)
+        return [float(v) for v in self._pyfunc.predict(pd.DataFrame(rows))]
 
 
 def _load_from_local() -> LoadedModel:
-    if not os.path.isfile(LOCAL_MODEL_PATH) or not os.path.isfile(SCALER_PATH):
-        raise FileNotFoundError("baseline 모델과 scaler를 먼저 생성하세요")
-    from tensorflow import keras
+    if not os.path.isdir(LOCAL_PYFUNC_PATH):
+        raise FileNotFoundError(
+            f"{LOCAL_PYFUNC_PATH}가 없습니다. diesel_registry.save_local_pyfunc()로 먼저 저장하세요"
+        )
+    from mlflow.pyfunc import load_model
 
-    keras_model = keras.models.load_model(LOCAL_MODEL_PATH)
-    scaler = GasolineScaler.load(SCALER_PATH)
-    return LoadedModel(keras_model=keras_model, scaler=scaler, version="v1-local")
+    return LoadedModel(load_model(LOCAL_PYFUNC_PATH), version="local")
 
 
 def _load_from_mlflow() -> LoadedModel:
-    """Production 버전 번호를 먼저 확인한 뒤 그 번호로 로드한다.
+    """champion이 가리키는 버전 번호를 먼저 확인한 뒤 그 번호로 로드한다.
 
-    stage URI(.../Production)를 바로 로드하면 확인과 로드 사이에 승격이 일어날 때
-    응답의 버전과 실제 가중치가 어긋날 수 있다. 스케일러는 항상 로컬 파일에서 읽는다.
+    alias URI(@champion)를 바로 로드하면 확인과 로드 사이에 승격이 일어날 때
+    응답의 버전과 실제 가중치가 어긋날 수 있다.
     """
     import mlflow
     from mlflow.exceptions import MlflowException
-    from mlflow.tensorflow import load_model
+    from mlflow.pyfunc import load_model
     from mlflow.tracking import MlflowClient
 
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db"))
     try:
-        versions = MlflowClient().get_latest_versions(MODEL_NAME, ["Production"])
-    except MlflowException as exc:  # 등록된 모델 이름이 아직 없는 새 레지스트리 등
-        raise FileNotFoundError(f"{MODEL_NAME}을 레지스트리에서 찾을 수 없습니다") from exc
-    if not versions:
-        raise FileNotFoundError(f"{MODEL_NAME}에 Production 버전이 없습니다")
-    version = versions[0].version
-    keras_model = load_model(f"models:/{MODEL_NAME}/{version}")
-    scaler = GasolineScaler.load(SCALER_PATH)
-    return LoadedModel(keras_model=keras_model, scaler=scaler, version=f"production:{version}")
+        version = str(MlflowClient().get_model_version_by_alias(MODEL_NAME, ALIAS).version)
+    except MlflowException as exc:  # 등록 모델·alias가 아직 없는 새 레지스트리 등
+        raise FileNotFoundError(f"{MODEL_NAME}@{ALIAS}를 레지스트리에서 찾을 수 없습니다") from exc
+    pyfunc = load_model(f"models:/{MODEL_NAME}/{version}")
+    return LoadedModel(pyfunc, version=f"{ALIAS}:{version}", registry_version=version)
 
 
 def _load_model() -> LoadedModel:
@@ -116,17 +105,30 @@ def get_model() -> LoadedModel:
     return _model_cache
 
 
-def reload_model() -> dict:
-    """AIOps 재학습·승격 후 호출. 새 모델 로드에 성공할 때만 캐시를 교체한다.
+def reload_model(expected_version: str | None) -> dict:
+    """AIOps 재학습·승격 후 호출. 승격된 버전(expected_version)이 실제로 로드될 때만 캐시를 교체한다.
 
-    실패하면 기존 모델을 그대로 두고 reloaded=False와 error를 돌려준다.
+    local 모드·버전 정보 없음·로드 실패·champion이 다른 버전을 가리킴 → 기존 모델 유지,
+    reloaded=False와 error를 돌려준다.
     """
     global _model_cache
     with _reload_lock:
+        current = _model_cache.version if _model_cache is not None else None
+
+        def keep(reason: str) -> dict:
+            return {"reloaded": False, "version": current, "error": reason}
+
+        if expected_version is None:
+            return keep("승격 버전 정보가 없어 교체를 확인할 수 없습니다")
+        if os.getenv("MODEL_SOURCE", "local") != "mlflow":
+            return keep("MODEL_SOURCE=local은 레지스트리 승격 버전을 서빙하지 않습니다")
         try:
-            model = _load_model()
+            model = _load_from_mlflow()
         except Exception as exc:
-            current = _model_cache.version if _model_cache is not None else None
-            return {"reloaded": False, "version": current, "error": str(exc)}
+            return keep(str(exc))
+        if model.registry_version != str(expected_version):
+            return keep(
+                f"{ALIAS}이 v{model.registry_version}을 가리킵니다 (승격 v{expected_version})"
+            )
         _model_cache = model
         return {"reloaded": True, "version": model.version}

@@ -135,7 +135,7 @@
       <p>
         <code>data/uploads/</code>는 여기서 업로드한 CSV만 쌓이는 곳입니다. 학습(<code>train_and_register.py</code> 등)은
         항상 가장 최근에 올라온 파일을 사용합니다. <code>data/sample_diesel_prices.csv</code>는 합성 데이터입니다. 연결 확인용으로 올려보세요
-        (컬럼: date, diesel_price, singapore_diesel_price, usd_krw, tax_or_supply_feature · 최소 41행).
+        (컬럼: date, diesel_price, singapore_diesel_price, usd_krw, tax_or_supply_feature · 최소 175행).
       </p>
     </div>
     <div class="upload-row">
@@ -198,9 +198,8 @@
 
 <script>
 /* ===================== 전역 상태 ===================== */
-// 서버(data/features.py, monitoring/drift_detector.py)와 동일한 값 (상수만 복제)
-const SEQ_LEN = 20;
-const WINDOW_SIZE = 21;
+// 서버(serving_app/schemas.py BATCH_MIN_ROWS)와 동일한 값 (상수만 복제)
+const BATCH_MIN_ROWS = 175; // 입력 120 + 짝 28 − 1 + 4주 정답 28
 const RMSE_THRESHOLD = 10.0;
 
 let lastPipelineRun = null; // { driftCheck, clientRmse, ts }
@@ -230,6 +229,11 @@ function randomWalk(n, base, sigma) {
   let logPrice = Math.log(base);
   for (let i = 0; i < n; i++) { logPrice += randn() * sigma; prices.push(Math.exp(logPrice)); }
   return prices;
+}
+function dayAfter(start, i) {
+  const d = new Date(start + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + i);
+  return d.toISOString().slice(0, 10);
 }
 function rmseOf(actual, predicted) {
   const n = Math.min(actual.length, predicted.length);
@@ -352,14 +356,14 @@ function stageHtml(stage, idx, state, statusLabel) {
 async function sendBatch(kind) {
   const statusEl = document.getElementById("drift-status");
   const resultBox = document.getElementById("drift-result");
-  const n = SEQ_LEN + WINDOW_SIZE;
+  const n = BATCH_MIN_ROWS;
   const sigma = kind === "drift" ? DRIFT_SIGMA : NORMAL_SIGMA;
   const prices = randomWalk(n, DEFAULT_BASE_PRICE, sigma);
 
   statusEl.innerHTML = `<span class="pill warn"><span class="dot"></span>전송 중… (fine-tuning이 걸리면 수십 초 걸릴 수 있습니다)</span>`;
 
   try {
-    const res = await fetch("/predict/batch-test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: prices.map(diesel_price => ({diesel_price, singapore_diesel_price: 75, usd_krw: 1350, tax_or_supply_feature: 0})) }) });
+    const res = await fetch("/predict/batch-test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: prices.map((diesel_price, i) => ({date: dayAfter("2026-01-01", i), diesel_price, singapore_diesel_price: 90, usd_krw: 1400, tax_or_supply_feature: 0})) }) });
     const data = await safeJson(res);
     if (!res.ok) {
       const reason = data.__raw
@@ -369,9 +373,8 @@ async function sendBatch(kind) {
       showResult(resultBox, { status: res.status, detail: data }, true);
       return;
     }
-    const actual = [];
-    for (let i = 0; i < prices.length - SEQ_LEN; i++) actual.push(prices[i + SEQ_LEN]);
-    const clientRmse = rmseOf(actual, data.predictions || []);
+    const pairs = data.predictions || []; // 1주차 예측 vs 1주차 실제 평균
+    const clientRmse = rmseOf(pairs.map(p => p.actual[0]), pairs.map(p => p.predicted[0]));
 
     lastPipelineRun = { driftCheck: data.drift_check || {}, clientRmse, ts: Date.now() / 1000 };
     renderPipeline();
@@ -379,16 +382,16 @@ async function sendBatch(kind) {
 
     const check = data.drift_check || {};
     let level = "ok", label = "정상 (드리프트 없음)";
-    if (check.status === "retrain_triggered" && check.promoted) {
+    if (check.promoted === true) {
       level = "ok"; label = `재학습 완료 · 새 버전 승격 (rmse=${check.rmse?.toFixed?.(2) ?? check.rmse})`;
-    } else if (check.status === "retrain_triggered" && check.promoted === false) {
+    } else if (check.promoted === false) {
       level = "warn"; label = `드리프트 감지 · 재학습했지만 게이트 미통과 (rmse=${check.rmse?.toFixed?.(2) ?? check.rmse})`;
     } else if (check.status === "retrain_triggered") {
       level = "warn"; label = "드리프트 감지 · 재학습 트리거됨";
     }
     statusEl.innerHTML = `
       <span class="pill ${level}"><span class="dot"></span>${label}</span>
-      <span class="pill neutral" style="margin-left:6px;">클라이언트 계산 RMSE (원/L): ${clientRmse != null ? clientRmse.toFixed(2) : "-"}</span>`;
+      <span class="pill neutral" style="margin-left:6px;">클라이언트 계산 1주차 RMSE (원/L): ${clientRmse != null ? clientRmse.toFixed(2) : "-"}</span>`;
     showResult(resultBox, data, false);
   } catch (e) {
     statusEl.innerHTML = `<span class="pill err"><span class="dot"></span>연결 실패</span>`;
