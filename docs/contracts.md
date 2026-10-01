@@ -56,6 +56,8 @@ CSV의 추가 열은 공통 피처에서 제외합니다. API의 추가 JSON 필
 | POST | `/predict/batch-test` | `BatchTestRequest` → `BatchTestResponse` | 입력 422, 모델 미준비/결과 계약 위반 503, AIOps 미구현 501 |
 | GET | `/logs` | 로그 파일 목록 | 기존 조회 API |
 | GET | `/logs/{filename}` | `name`, `content` | 없는 파일 404, 경로 조작 400 |
+| GET | `/models` | `source`, `serving_version`, `production_version`, `history[]`(gate 태그가 있는 최근 50개 run, 최신순: `mode`, `rmse`·`naive_rmse` 1~4주, `gate`, `gate_reasons`, `base_version`, 등록됐으면 `version`·`stage`·`aliases`·`registered_at`) | `MODEL_SOURCE=local`이면 `history:[]`, 레지스트리 조회 실패는 200 + `error` |
+| GET | `/metrics/summary?window=5m\|1h\|6h\|24h` | `/predict`·`/predict/batch-test`·`/data/upload`별 `requests`, `success_rate`(5xx 제외 비율), `p50_ms`, `p95_ms`. 요청이 없으면 값은 `null`. 원본은 `logs/requests.log` | 잘못된 window 422 |
 
 `PredictRequest`는 `{sequence: DailyPoint[120]}`입니다. 실행 가능한 합성 요청은
 [`examples/predict.json`](../examples/predict.json), 정상 응답 예시는
