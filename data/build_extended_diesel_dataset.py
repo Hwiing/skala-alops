@@ -6,6 +6,7 @@ from datetime import date, timedelta
 from statistics import mean
 
 from data.build_diesel_dataset import build_rows, write_rows
+from data.diesel import SELECTED_DIESEL_DATASET
 from data.external import (
     SINGAPORE_DIESEL_LAG_DAYS,
     load_ecos_wide_usd_krw,
@@ -18,7 +19,7 @@ from data.opinet import load_opinet_diesel_many
 
 SINGAPORE_005_COLUMN = "경유(0.05%)"
 OVERLAP_DAYS = 60
-DEFAULT_OUT = "data/processed/diesel_features_2008_spliced.csv"
+DEFAULT_OUT = SELECTED_DIESEL_DATASET
 DEFAULT_PROVENANCE = "data/processed/diesel_features_2008_provenance.csv"
 
 

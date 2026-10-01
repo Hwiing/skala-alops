@@ -4,7 +4,7 @@ from datetime import date, timedelta
 import pytest
 
 from data.build_diesel_dataset import build_rows, write_rows
-from data.diesel import DIESEL_FEATURE_COLUMNS, validate_diesel_rows
+from data.diesel import DIESEL_FEATURE_COLUMNS, build_diesel_weekly_sequences, validate_diesel_rows
 from data.external import asof_values, load_opinet_singapore_diesel, load_tax_policy
 from data.opinet import load_opinet_diesel, load_opinet_diesel_many
 
@@ -161,3 +161,23 @@ def test_diesel_validation_rejects_mixed_or_broken_rows():
             validate_diesel_rows([broken])
     with pytest.raises(ValueError, match="diesel_price"):
         validate_diesel_rows([{k: v for k, v in good.items() if k != "diesel_price"}])
+
+
+def test_weekly_targets_start_after_input_and_cover_four_nonoverlapping_weeks():
+    start = date(2026, 8, 1)
+    rows = [
+        {
+            "date": (start + timedelta(days=i)).isoformat(),
+            "diesel_price": 1000 + i,
+            "singapore_diesel_price": 90,
+            "usd_krw": 1300,
+            "tax_or_supply_feature": 25.1,
+        }
+        for i in range(30)
+    ]
+    inputs, targets = build_diesel_weekly_sequences(rows, seq_len=2)
+    assert len(inputs) == len(targets) == 1
+    assert [row["date"] for row in inputs[0]] == ["2026-08-01", "2026-08-02"]
+    assert targets[0] == [1005.0, 1012.0, 1019.0, 1026.0]
+    with pytest.raises(ValueError, match="정답 28일"):
+        build_diesel_weekly_sequences(rows[:-1], seq_len=2)
