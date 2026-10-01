@@ -274,6 +274,7 @@
   .inline-status { display: flex; align-items: center; gap: var(--s2); font-size: var(--fs-sub); min-height: 22px; }
   .inline-status.ok { color: var(--ok); }
   .inline-status.err { color: var(--err); }
+  .inline-status.warn { color: var(--warn); }
   .inline-status.muted { color: var(--text-3); }
 
   /* ===================== Logs ===================== */
@@ -374,7 +375,7 @@
     <div class="section-head">
       <div>
         <h2 class="t-title" id="pipe-title">재학습 파이프라인</h2>
-        <p class="t-sub">마지막 배치가 거쳐 간 단계입니다.</p>
+        <p class="t-sub">마지막 배치·업로드 판정이 거쳐 간 단계입니다.</p>
       </div>
       <span class="t-caption" id="pipeline-meta">아직 실행 안 함</span>
     </div>
@@ -386,7 +387,7 @@
     <div class="section-head">
       <div>
         <h2 class="t-title" id="data-title">학습 데이터</h2>
-        <p class="t-sub">학습은 가장 최근에 업로드한 CSV를 사용합니다.</p>
+        <p class="t-sub">업로드한 일별 가격은 실시간 예측(<code>/predict</code>)의 정답으로 채워져 드리프트를 판정합니다. 재학습은 서버의 학습 CSV(<code>DIESEL_DATA_CSV</code>) 최근 627행을 씁니다.</p>
       </div>
     </div>
     <div class="data-grid">
@@ -561,19 +562,24 @@ async function uploadFile() {
   if (!input.files.length) { setUploadStatus("err", "파일을 먼저 선택하세요"); return; }
   const form = new FormData();
   form.append("file", input.files[0]);
-  setBusy(btn, true, "업로드 중…");
+  const rows = parseCsv(await input.files[0].text());
+  setBusy(btn, true, "업로드·판정 중…");
   setUploadStatus("muted", "");
   try {
     const res = await fetch("/data/upload", { method: "POST", body: form });
     const data = await safeJson(res);
     if (!res.ok) { setUploadStatus("err", data.detail || "업로드 실패"); return; }
-    setUploadStatus("ok", `업로드 완료 · ${data.rows}행`);
+    const judged = data.drift_check ? " · 판정 결과는 위에 표시" : data.drift_check_error ? " · 판정 실패" : " · 판정할 새 정답 없음";
+    setUploadStatus(data.drift_check_error ? "warn" : "ok", `업로드 완료 · ${data.rows}행 · 정답 ${data.filled ?? 0}개 채움${judged}`);
     input.value = "";
     onFileChange();
     loadDataStatus();
+    if (data.drift_check_error) renderJudgementError(data);
+    if (data.drift_check) await showDriftCheck(data, rows);
   } catch (e) {
     setUploadStatus("err", `요청 실패: ${e.message}`);
   } finally {
+    loadHealth(); // 판정 오류여도 서빙 버전 표시는 최신으로
     setBusy($("upload-btn"), false, "업로드");
     $("upload-btn").disabled = !input.files.length;
   }
@@ -727,10 +733,14 @@ function renderResult(data, served) {
   const pairs = data.predictions || [];
   const weeks = weeklyStats(pairs);
   const w1 = weeks[0];
-  const metrics = [
-    `<div class="metric"><dt>1주차 예측 RMSE</dt><dd>${fmt(w1.rmse)}<small>원/L</small></dd></div>`,
-    `<div class="metric"><dt>1주차 naive RMSE</dt><dd>${fmt(w1.naive)}<small>원/L</small></dd></div>`,
-  ];
+  // 업로드 판정에는 배치 짝이 없다 → 주차별 표 대신 채운 정답 수를 보여준다.
+  const fromUpload = !pairs.length && typeof data.filled === "number";
+  const metrics = fromUpload
+    ? [`<div class="metric"><dt>이번 업로드로 채운 정답</dt><dd>${data.filled}<small>개 (주차)</small></dd></div>`]
+    : [
+        `<div class="metric"><dt>1주차 예측 RMSE</dt><dd>${fmt(w1.rmse)}<small>원/L</small></dd></div>`,
+        `<div class="metric"><dt>1주차 naive RMSE</dt><dd>${fmt(w1.naive)}<small>원/L</small></dd></div>`,
+      ];
   // 재학습 모델의 검증 RMSE(1~4주 배열)는 재학습이 일어났을 때만 서버가 준다. 배포 게이트 한도와 비교.
   // 서버 탐지 지표(기존 모델, 최근 28개 기준일 1주차). 재학습 검증 RMSE(check.rmse)와 구분한다.
   if (typeof check.drift_rmse === "number") {
@@ -759,13 +769,14 @@ function renderResult(data, served) {
       </div>
     </div>
     <dl class="metrics" style="--cols: ${metrics.length}">${metrics.join("")}</dl>
+    ${fromUpload ? `<p class="t-caption" style="margin-top: var(--s4);">업로드 판정 · 실시간 예측 기록(최근 28개 기준일)으로 판정했습니다.</p>` : `
     <div class="weeks-wrap">
       <table class="weeks">
         <caption>기준일 ${pairs.length}개(${esc(span)})의 주차별 평균가와 오차 · 원/L · naive보다 나쁜 값은 주황색</caption>
         <thead><tr><th scope="col">주차</th><th scope="col">실제 평균</th><th scope="col">예측 평균</th><th scope="col">예측 RMSE</th><th scope="col">naive RMSE</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    </div>
+    </div>`}
     ${rawDetails(data)}`;
 }
 
@@ -795,6 +806,42 @@ function makeRows(prices) {
 }
 
 const INPUT_DAYS = 120; // /predict 입력 행 수
+
+// 업로드 CSV(서버가 검증하는 경유 5컬럼, 따옴표 없는 숫자) → /predict 행. 교체 후 버전 재확인에만 쓴다.
+function parseCsv(text) {
+  const [head, ...lines] = text.replace(/^\uFEFF/, "").trim().split(/\r?\n/);
+  const cols = head.split(",").map((c) => c.trim());
+  return lines.filter(Boolean).map((line) => {
+    const cells = line.split(",");
+    return Object.fromEntries(cols.map((c, i) => [c, c === "date" ? cells[i].trim() : Number(cells[i])]));
+  });
+}
+
+// 판정 결과(배치·업로드 공통): 파이프라인 갱신, 교체됐으면 /health·/predict 버전으로 다시 확인 후 표시
+async function showDriftCheck(data, rows) {
+  lastPipelineRun = { driftCheck: data.drift_check || {}, ts: Date.now() / 1000 };
+  const health = await loadHealth();
+  const served = { health: health?.model_version ?? null, predict: null };
+  if (data.drift_check?.reload?.reloaded) served.predict = await predictVersion(rows);
+  renderResult(data, served);
+  renderPipeline();
+  loadLogFiles();
+}
+
+// 업로드는 저장·정답 적재까지 끝났지만 AIOps 판정이 실패한 경우. 서버는 다음 업로드 때 다시 판정한다.
+function renderJudgementError(data) {
+  const e = data.drift_check_error;
+  const detail = typeof e.detail === "string" ? e.detail : JSON.stringify(e.detail);
+  lastPipelineRun = null; // 이전 실행 결과를 이번 판정처럼 보이지 않게 비운다
+  renderPipeline();
+  $("pipeline-meta").textContent = "마지막 업로드 판정 실패 · 다음 업로드 때 다시 판정";
+  $("result").innerHTML = `
+    <div class="notice warn" role="alert">
+      <span class="dot warn"></span>
+      <div><strong>업로드는 저장했지만 드리프트 판정이 실패했습니다 (${esc(String(e.status_code))})</strong>${esc(detail)} · 정답 ${data.filled}개는 반영됐고, 다음 업로드 때 다시 판정합니다.</div>
+    </div>
+    ${rawDetails(data)}`;
+}
 async function predictVersion(rows) {
   const res = await fetch("/predict", {
     method: "POST",
@@ -819,13 +866,7 @@ async function sendBatch() {
     });
     const data = await safeJson(res);
     if (!res.ok) { renderError(res.status, data); return; }
-    lastPipelineRun = { driftCheck: data.drift_check || {}, ts: Date.now() / 1000 };
-    const health = await loadHealth();
-    const served = { health: health?.model_version ?? null, predict: null };
-    if (data.drift_check?.reload?.reloaded) served.predict = await predictVersion(rows); // 교체 성공은 실제 응답 버전으로 다시 확인
-    renderResult(data, served);
-    renderPipeline();
-    loadLogFiles();
+    await showDriftCheck(data, rows); // 교체 성공은 실제 응답 버전으로 다시 확인
   } catch (e) {
     $("result").innerHTML = `
       <div class="notice err" role="alert"><span class="dot err"></span>
