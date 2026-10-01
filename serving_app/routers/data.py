@@ -11,6 +11,7 @@ from data.contracts import BATCH_MIN_ROWS, CSV_COLUMNS
 from data.diesel import validate_diesel_rows
 from data.diesel_features import load_diesel_rows
 from data.storage import UPLOAD_DIR, latest_upload
+from serving_app.routers import predict as predict_router
 
 router = APIRouter(prefix="/data")
 
@@ -45,7 +46,12 @@ async def upload(file: UploadFile = File(...)):
     with open(dest, "w", encoding="utf-8", newline="") as f:
         f.write(text)
 
-    return {"filename": os.path.basename(dest), "rows": len(rows)}
+    # 업로드는 실시간 예측의 지연 정답이기도 하다. 새로 채운 정답이 있을 때만 판정한다.
+    filled = predict_router.fill_live_actuals(rows)
+    result = {"filename": os.path.basename(dest), "rows": len(rows), "filled": filled}
+    if filled:
+        result["drift_check"] = predict_router.judge_and_swap()
+    return result
 
 
 @router.get("/status")
