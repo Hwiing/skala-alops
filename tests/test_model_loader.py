@@ -23,7 +23,7 @@ def registry(monkeypatch):
 
     class FakeClient:
         def get_latest_versions(self, name, stages):
-            assert name == "GasolinePricePredictor"
+            assert name == "DieselPricePredictor"
             assert stages == ["Production"]
             if state["unregistered"]:
                 raise MlflowException(f"Registered Model with name={name} not found")
@@ -53,7 +53,7 @@ def registry(monkeypatch):
 def test_mlflow_loads_resolved_production_version(registry):
     model = model_loader._load_from_mlflow()
     assert model.version == "production:3"
-    assert registry["loaded_uris"] == ["models:/GasolinePricePredictor/3"]
+    assert registry["loaded_uris"] == ["models:/DieselPricePredictor/3"]
 
 
 def test_mlflow_without_production_raises_file_not_found(registry):

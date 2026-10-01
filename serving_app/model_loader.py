@@ -29,7 +29,7 @@ from data.features import GasolineScaler
 
 LOCAL_MODEL_PATH = "serving_app/models/gasoline_v1.keras"
 SCALER_PATH = "serving_app/models/scaler.pkl"
-MODEL_NAME = "GasolinePricePredictor"
+MODEL_NAME = "DieselPricePredictor"  # #28 경유 전환
 
 _model_cache = None  # Lazy Loading 캐시
 _reload_lock = threading.Lock()
