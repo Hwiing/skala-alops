@@ -22,15 +22,17 @@ main.py / train_and_register.py 코드는 그대로 두고 이 파일만 손대�
 """
 
 import os
+import threading
 import time
 
 from data.features import GasolineScaler
 
 LOCAL_MODEL_PATH = "serving_app/models/gasoline_v1.keras"
 SCALER_PATH = "serving_app/models/scaler.pkl"
-MLFLOW_MODEL_URI = "models:/GasolinePricePredictor/Production"
+MODEL_NAME = "GasolinePricePredictor"
 
 _model_cache = None  # Lazy Loading 캐시
+_reload_lock = threading.Lock()
 
 
 class LoadedModel:
@@ -64,17 +66,23 @@ def _load_from_local() -> LoadedModel:
 
 
 def _load_from_mlflow() -> LoadedModel:
-    """
-    TODO(Day2, 핵심 실습): mlflow.tensorflow.load_model(MLFLOW_MODEL_URI) 로
-    Production 모델을 로드하도록 완성하세요.
-    힌트: train_and_register.py 에서 이미 "GasolinePricePredictor" 이름으로 등록·승격까지 해두었습니다.
+    """Production 버전 번호를 먼저 확인한 뒤 그 번호로 로드한다.
 
-    # import mlflow.tensorflow
-    # keras_model = mlflow.tensorflow.load_model(MLFLOW_MODEL_URI)
-    # scaler = GasolineScaler.load(SCALER_PATH)  # 스케일러는 MLflow가 아니라 항상 로컬 파일에서
-    # return LoadedModel(keras_model=keras_model, scaler=scaler, version="production")
+    stage URI(.../Production)를 바로 로드하면 확인과 로드 사이에 승격이 일어날 때
+    응답의 버전과 실제 가중치가 어긋날 수 있다. 스케일러는 항상 로컬 파일에서 읽는다.
     """
-    raise NotImplementedError("_load_from_mlflow를 구현하세요 (실습 2-1)")
+    import mlflow
+    from mlflow.tensorflow import load_model
+    from mlflow.tracking import MlflowClient
+
+    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db"))
+    versions = MlflowClient().get_latest_versions(MODEL_NAME, ["Production"])
+    if not versions:
+        raise FileNotFoundError(f"{MODEL_NAME}에 Production 버전이 없습니다")
+    version = versions[0].version
+    keras_model = load_model(f"models:/{MODEL_NAME}/{version}")
+    scaler = GasolineScaler.load(SCALER_PATH)
+    return LoadedModel(keras_model=keras_model, scaler=scaler, version=f"production:{version}")
 
 
 def _load_model() -> LoadedModel:
@@ -102,3 +110,19 @@ def get_model() -> LoadedModel:
         _model_cache = _load_model()
         print(f"[lazy] model loaded in {time.time() - start:.3f}s on first request")
     return _model_cache
+
+
+def reload_model() -> dict:
+    """AIOps 재학습·승격 후 호출. 새 모델 로드에 성공할 때만 캐시를 교체한다.
+
+    실패하면 기존 모델을 그대로 두고 reloaded=False와 error를 돌려준다.
+    """
+    global _model_cache
+    with _reload_lock:
+        try:
+            model = _load_model()
+        except Exception as exc:
+            current = _model_cache.version if _model_cache is not None else None
+            return {"reloaded": False, "version": current, "error": str(exc)}
+        _model_cache = model
+        return {"reloaded": True, "version": model.version}
