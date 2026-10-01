@@ -1,5 +1,5 @@
 """
-휘발유 데이터를 LSTM 입력용 시퀀스로 변환하는 공용 유틸리티.
+경유 데이터를 기존 LSTM 입력용 시퀀스로 변환하는 공용 유틸리티.
 
 Day1 baseline 학습(scripts/train_baseline_v1.py), Day2 MLflow 학습
 (serving_app/train_and_register.py), Day3 fine-tuning 재학습
@@ -20,7 +20,7 @@ SEQ_LEN = 20  # 개인 실습 v1 전용. 공개 API는 data.contracts.INPUT_DAYS
 
 
 def validate_rows(rows: list[dict]) -> list[dict]:
-    """data.contracts의 공통 CSV 검증을 사용하는 기존 호출 이름."""
+    """data.contracts의 공통 경유 CSV 검증을 사용하는 기존 호출 이름."""
     return validate_daily_rows(rows)
 
 

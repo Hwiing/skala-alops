@@ -22,6 +22,18 @@ ROWS = [
 ]
 
 
+def test_mixed_product_file_diesel_loader_picks_diesel_only(tmp_path):
+    # 한 원본에 보통휘발유=1800, 자동차용경유=1700이 같이 있으면 경유 로더는 1700만, 휘발유 로더는 별도 키로
+    from data.opinet import load_opinet_gasoline
+
+    mixed = ["2026년09월28일,1800.0,1700.0\r\n", "2026년09월29일,1801.0,1701.0\r\n"]
+    path = write_opinet(tmp_path, mixed, header="구분,보통휘발유,자동차용경유\r\n")
+    assert [r["diesel_price"] for r in load_opinet_diesel(path)] == [1700.0, 1701.0]
+    gasoline = load_opinet_gasoline(path)
+    assert [r["gasoline_price"] for r in gasoline] == [1800.0, 1801.0]
+    assert all("diesel_price" not in r for r in gasoline)
+
+
 @pytest.mark.parametrize("encoding", ["cp949", "utf-8-sig"])
 def test_converts_diesel_without_using_gasoline(tmp_path, encoding):
     path = write_opinet(tmp_path, ROWS, encoding=encoding)

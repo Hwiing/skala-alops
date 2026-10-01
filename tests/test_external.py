@@ -2,7 +2,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from data.build_dataset import build_rows
+from data.build_dataset import LEGACY_GASOLINE_COLUMNS, build_rows
 from data.ecos import parse_ecos_response
 from data.external import (
     asof_values,
@@ -11,7 +11,7 @@ from data.external import (
     load_usd_krw,
     tax_cut_rates,
 )
-from data.features import FEATURE_COLUMNS
+from data.features import validate_rows
 
 D = date.fromisoformat
 
@@ -39,7 +39,7 @@ FX_CSV = (
 
 def gasoline(start="2023-01-06", days=6):
     return [
-        {"date": (D(start) + timedelta(days=i)).isoformat(), "diesel_price": 1540.0 + i}
+        {"date": (D(start) + timedelta(days=i)).isoformat(), "gasoline_price": 1540.0 + i}
         for i in range(days)
     ]
 
@@ -119,14 +119,23 @@ def test_build_rows_matches_contract(tmp_path):
     # 2023-01-05는 그 전날 공개된 국제유가가 없으므로 추정하지 않고 제외
     assert trimmed == 1
     assert rows[0]["date"] == "2023-01-06"
-    assert list(rows[0]) == ["date", *FEATURE_COLUMNS]
+    assert list(rows[0]) == ["date", *LEGACY_GASOLINE_COLUMNS]
     assert rows[0] == {
         "date": "2023-01-06",
-        "diesel_price": 1541.0,
-        "singapore_diesel_price": 77.0,
+        "gasoline_price": 1541.0,
+        "dubai_crude_price": 77.0,
         "usd_krw": 1268.2,
         "tax_or_supply_feature": 25.0,
     }
+
+
+def test_legacy_gasoline_rows_rejected_by_diesel_contract(tmp_path):
+    crude = load_opinet_crude(write(tmp_path, "crude.csv", CRUDE_CSV))
+    fx = load_usd_krw(write(tmp_path, "fx.csv", FX_CSV, "utf-8"))
+    rows, _ = build_rows(gasoline("2023-01-05"), crude, fx, load_tax_policy())
+    # 휘발유·두바이유 행은 경유 공통 계약(diesel_price 필수)을 통과하지 못한다
+    with pytest.raises(ValueError, match="diesel_price"):
+        validate_rows([{k: str(v) for k, v in r.items()} for r in rows])
 
 
 def test_parse_ecos_response():

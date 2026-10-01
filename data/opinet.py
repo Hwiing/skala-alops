@@ -85,8 +85,8 @@ def _load_opinet_product(path: str, column: str, price_key: str) -> list[dict]:
 
 
 def load_opinet_gasoline(path: str, column: str = GASOLINE_COLUMN) -> list[dict]:
-    """오피넷 일간 보통휘발유 CSV -> date, diesel_price (#42 공통 컬럼명; 기존 휘발유 경로 호환용)."""
-    return _load_opinet_product(path, column, "diesel_price")
+    """오피넷 일간 보통휘발유 CSV -> date, gasoline_price (기존 휘발유 경로 전용, 경유 계약과 분리)."""
+    return _load_opinet_product(path, column, "gasoline_price")
 
 
 def load_opinet_diesel(path: str, column: str = DIESEL_COLUMN) -> list[dict]:
@@ -121,7 +121,7 @@ def main():
 
     raw_rows = read_csv_text(args.path)
     rows = load_opinet_gasoline(args.path)
-    prices = [row["diesel_price"] for row in rows]
+    prices = [row["gasoline_price"] for row in rows]
     print(f"원본 {len(raw_rows)}행 -> 변환 {len(rows)}행")
     print(
         f"기간 {rows[0]['date']} ~ {rows[-1]['date']}, 가격 {min(prices):.2f} ~ {max(prices):.2f}원/L"
