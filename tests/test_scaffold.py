@@ -1,6 +1,7 @@
 import csv
 import io
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,7 +9,9 @@ from fastapi.testclient import TestClient
 from data.features import FEATURE_COLUMNS, GasolineScaler, build_sequences, load_rows
 from serving_app import model_loader
 from serving_app.main import app
+from serving_app.monitoring import retrain_trigger
 from serving_app.routers import data as data_router
+from serving_app.routers import predict as predict_router
 
 SAMPLE = Path("data/sample_gasoline_prices.csv")
 
@@ -71,9 +74,105 @@ def test_missing_model_returns_503(client, monkeypatch):
     assert client.post("/predict", json=payload()).status_code == 503
 
 
-def test_batch_reports_unimplemented(client):
-    response = client.post("/predict/batch-test", json={"rows": payload(21)["sequence"]})
-    assert response.status_code == 501
+class SeqLastPriceModel:
+    """윈도우 마지막 날 가격 + 1을 돌려주는 가짜 모델 (예측·실제값 짝을 확인하기 쉽게)."""
+
+    version = "test-only"
+
+    def predict_one(self, sequence):
+        assert len(sequence) == 20
+        return sequence[-1][FEATURE_COLUMNS[0]] + 1
+
+
+@pytest.fixture
+def batch(client, monkeypatch):
+    """가짜 모델·트리거·reload로 batch_test를 돌리는 환경. state로 결과를 조작한다."""
+    state = {"trigger": {"status": "ok"}, "reload": {"reloaded": True, "version": "production:2"}}
+    calls = {"trigger": [], "reload": 0}
+
+    def trigger(recent):
+        calls["trigger"].append(list(recent))
+        if state["trigger"] is NotImplementedError:
+            raise NotImplementedError("TODO")
+        return dict(state["trigger"])
+
+    def reload():
+        calls["reload"] += 1
+        return dict(state["reload"])
+
+    monkeypatch.setattr(model_loader, "_model_cache", SeqLastPriceModel())
+    monkeypatch.setattr(retrain_trigger, "check_and_trigger", trigger)
+    monkeypatch.setattr(model_loader, "reload_model", reload)
+    monkeypatch.setattr(predict_router, "recent_predictions", [])
+
+    def post(length=41):
+        return client.post("/predict/batch-test", json={"rows": payload(length)["sequence"]})
+
+    return SimpleNamespace(post=post, state=state, calls=calls)
+
+
+def test_batch_pairs_each_prediction_with_next_row(batch):
+    response = batch.post(41)
+
+    assert response.status_code == 200
+    prices = [row[FEATURE_COLUMNS[0]] for row in payload(41)["sequence"]]
+    assert response.json()["predictions"] == [round(p + 1, 2) for p in prices[19:40]]
+    assert predict_router.recent_predictions == [
+        {"predicted": prices[i + 19] + 1, "actual": prices[i + 20]} for i in range(21)
+    ]
+    assert batch.calls["trigger"] == [predict_router.recent_predictions]
+
+
+def test_batch_keeps_only_latest_window(batch):
+    batch.post(30)
+    batch.post(41)
+
+    assert len(predict_router.recent_predictions) == 21
+
+
+def test_batch_promoted_reloads_and_clears_window(batch):
+    batch.state["trigger"] = {"status": "retrain_triggered", "promoted": True, "rmse": 8.0}
+
+    response = batch.post(41)
+
+    assert response.status_code == 200
+    assert response.json()["drift_check"]["reload"] == {"reloaded": True, "version": "production:2"}
+    assert batch.calls["reload"] == 1
+    assert predict_router.recent_predictions == []
+
+
+def test_batch_reload_failure_keeps_window(batch):
+    batch.state["trigger"] = {"status": "retrain_triggered", "promoted": True, "rmse": 8.0}
+    batch.state["reload"] = {"reloaded": False, "version": "production:1", "error": "boom"}
+
+    response = batch.post(41)
+
+    assert response.json()["drift_check"]["reload"]["reloaded"] is False
+    assert len(predict_router.recent_predictions) == 21
+
+
+def test_batch_not_promoted_skips_reload(batch):
+    batch.state["trigger"] = {"status": "retrain_triggered", "promoted": False, "rmse": 12.0}
+
+    response = batch.post(41)
+
+    assert "reload" not in response.json()["drift_check"]
+    assert batch.calls["reload"] == 0
+    assert len(predict_router.recent_predictions) == 21
+
+
+def test_batch_unimplemented_trigger_returns_501(batch):
+    batch.state["trigger"] = NotImplementedError
+
+    assert batch.post(41).status_code == 501
+
+
+def test_batch_missing_model_returns_503(batch, monkeypatch):
+    def missing():
+        raise FileNotFoundError("test missing model")
+
+    monkeypatch.setattr(model_loader, "get_model", missing)
+    assert batch.post(41).status_code == 503
 
 
 def test_csv_upload_and_status(client, monkeypatch, tmp_path):
