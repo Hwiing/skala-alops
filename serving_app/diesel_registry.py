@@ -93,7 +93,8 @@ def production_version(client: MlflowClient) -> str | None:
         versions = client.get_latest_versions(MODEL_NAME, ["Production"])
     except MlflowException:  # 등록 모델 이름이 아직 없음
         return None
-    return versions[0].version if versions else None
+    # MLflow 3.x SQLite 백엔드는 version을 int로 돌려준다 → 계약(str)에 맞게 경계에서 정규화
+    return str(versions[0].version) if versions else None
 
 
 def load_forecaster(version: str) -> DieselForecaster:
@@ -162,14 +163,13 @@ def log_and_gate(forecaster, frame, val_idx, meta: dict, run_name: str) -> dict:
             )
         if gate["passed"]:
             v = mlflow.register_model(f"runs:/{run.info.run_id}/model", MODEL_NAME)
+            version = str(v.version)  # int로 올 수 있음 (production_version과 같은 이유)
             client.transition_model_version_stage(
-                MODEL_NAME, v.version, "Production", archive_existing_versions=True
+                MODEL_NAME, version, "Production", archive_existing_versions=True
             )
-            client.set_registered_model_alias(MODEL_NAME, ALIAS, v.version)
-            result.update(promoted=True, version=v.version)
-            print(
-                f"[GATE PASSED] {MODEL_NAME} v{v.version} → Production (이전: {before or '없음'})"
-            )
+            client.set_registered_model_alias(MODEL_NAME, ALIAS, version)
+            result.update(promoted=True, version=version)
+            print(f"[GATE PASSED] {MODEL_NAME} v{version} → Production (이전: {before or '없음'})")
         elif before is None:
             print(
                 f"[GATE FAILED] {'; '.join(gate['reasons'])} → 등록 안 함. Production 없음: 서비스할 모델 없음"
