@@ -530,7 +530,7 @@ async function loadHealth() {
   }
   $("model-dot").className = data.model_loaded ? "dot ok" : "dot";
   $("model-version").textContent = data.model_loaded ? `모델 ${data.model_version}` : "모델 미로드";
-  $("model-meta").textContent = `${data.model_source} · ${data.loading_mode}`;
+  $("model-meta").textContent = [data.contract_version, data.model_source, data.loading_mode].filter(Boolean).join(" · ");
   return data;
 }
 
@@ -679,15 +679,16 @@ function reasonOf(check) {
   return check.error || (check.reasons || []).join(", ");
 }
 // 정상(ok)과 알려진 실패 상태 외의 값은 정상으로 떨어뜨리지 않는다.
-function summarize(check, servingVersion) {
+// served: 교체 직후 다시 확인한 실제 서빙 버전 { health, predict }
+function summarize(check, served) {
   if (check.promoted === true) {
     const r = check.reload || {};
-    if (r.reloaded && servingVersion === r.version) {
-      return { level: "ok", title: "재학습 후 새 모델로 교체했습니다", sub: `/health 확인: ${r.version} 버전이 지금 서빙 중입니다.` };
+    if (r.reloaded && served.health === r.version && served.predict === r.version) {
+      return { level: "ok", title: "재학습 후 새 모델로 교체했습니다", sub: `/health·/predict 확인: ${r.version} 버전이 지금 서빙 중입니다.` };
     }
     if (r.reloaded) {
       return { level: "warn", title: "교체 응답과 서빙 중인 버전이 다릅니다",
-        sub: `교체 응답 ${r.version}, /health ${servingVersion ?? "응답 없음"}. 서버 로그를 확인하세요.` };
+        sub: `교체 응답 ${r.version}, /health ${served.health ?? "응답 없음"}, /predict ${served.predict ?? "응답 없음"}. 서버 로그를 확인하세요.` };
     }
     return { level: "warn", title: "새 모델이 승격됐지만 서빙 교체에 실패했습니다",
       sub: `기존 모델(${r.version ?? "알 수 없음"})을 계속 사용합니다. 원인: ${r.error ?? "알 수 없음"}` };
@@ -719,9 +720,10 @@ function weeklyStats(pairs) {
   });
 }
 
-function renderResult(data, servingVersion) {
+function renderResult(data, served) {
   const check = data.drift_check || {};
-  const s = summarize(check, servingVersion);
+  const s = summarize(check, served);
+  const servingVersion = served.health;
   const pairs = data.predictions || [];
   const weeks = weeklyStats(pairs);
   const w1 = weeks[0];
@@ -792,22 +794,36 @@ function makeRows(prices) {
   });
 }
 
+const INPUT_DAYS = 120; // /predict 입력 행 수
+async function predictVersion(rows) {
+  const res = await fetch("/predict", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sequence: rows.slice(-INPUT_DAYS) }),
+  }).catch(() => null);
+  const data = res && res.ok ? await safeJson(res) : null;
+  return data?.model_version ?? null;
+}
+
 async function sendBatch() {
   const kind = selectedKind();
   const btn = $("send-btn");
   const prices = randomWalk(BATCH_MIN_ROWS, DEFAULT_BASE_PRICE, kind === "drift" ? DRIFT_SIGMA : NORMAL_SIGMA);
+  const rows = makeRows(prices);
   setBusy(btn, true, "전송 중…");
   try {
     const res = await fetch("/predict/batch-test", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rows: makeRows(prices) }),
+      body: JSON.stringify({ rows }),
     });
     const data = await safeJson(res);
     if (!res.ok) { renderError(res.status, data); return; }
     lastPipelineRun = { driftCheck: data.drift_check || {}, ts: Date.now() / 1000 };
-    const health = await loadHealth(); // 교체 성공은 /health의 실제 버전으로 다시 확인한다
-    renderResult(data, health?.model_version ?? null);
+    const health = await loadHealth();
+    const served = { health: health?.model_version ?? null, predict: null };
+    if (data.drift_check?.reload?.reloaded) served.predict = await predictVersion(rows); // 교체 성공은 실제 응답 버전으로 다시 확인
+    renderResult(data, served);
     renderPipeline();
     loadLogFiles();
   } catch (e) {
