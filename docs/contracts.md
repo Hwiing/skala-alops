@@ -10,7 +10,7 @@
 현재 입력 검증·주간 예측·배치 정답 연결·pyfunc 로더·승격 버전 확인은 구현됐습니다.
 드리프트 판정·자동 재학습 트리거·운영자 알림도 `/predict/batch-test`에 연결됐습니다.
 실시간 `/predict` 기록과 `/data/upload`의 지연 정답 적재·판정도 연결됐습니다.
-**업로드 파일을 재학습 데이터로 쓰는 것은 아직 아닙니다**(재학습은 `DIESEL_DATA_CSV`).
+재학습 데이터는 `DIESEL_DATA_CSV`와 업로드 CSV 중 627행 이상이면서 마지막 날짜가 가장 최근인 파일의 최근 627행입니다.
 실모델이 없으면 예측은 503입니다.
 이 계약 정의가 전체 AIOps 데모 완료를 의미하지는 않습니다.
 
@@ -143,13 +143,13 @@ Production 가중치로 warm start하고 scaler는 재fit하지 않습니다. �
 같은 기준일을 다시 예측하면 예측값만 바뀌고 채워 둔 정답은 유지됩니다(정답은 시장 실제값).
 
 업로드는 새 정답이 없어도 **이전 판정이 끝나지 않았으면 다시 판정**합니다. 끝나지 않은 경우는 판정 오류(501/503),
-`retrain_failed`(학습 예외·쿨다운·다른 재학습 진행 중), 승격 뒤 교체 실패입니다. 같은 판정은 AIOps가 학습을 끝낸 결정
+`retrain_failed`(학습 예외·쿨다운·다른 재학습 진행 중), 승격 뒤 교체 실패입니다. 같은 판정·같은 학습 데이터는 AIOps가 학습을 끝낸 결정
 (`promoted`·`gate_failed`)을 재사용하므로, 교체 실패 뒤 같은 CSV를 다시 올리면 재학습 없이 교체만 다시 시도합니다.
 학습 예외·데이터 부족·Production 없음은 재사용하지 않고 쿨다운(`RETRAIN_COOLDOWN_SECONDS`) 뒤 다시 학습합니다.
 업로드 판정은 스레드풀에서 실행되어 재학습(수십 초) 중에도 `/health`·`/predict`는 응답합니다.
 
 **시연 경계:** 과거 날짜 배치나 업로드로 드리프트를 만들어도 재학습 데이터는 그 시점이 아니라
-현재 `DIESEL_DATA_CSV`의 최신 627행입니다. 탐지 구간과 재학습 구간이 다를 수 있습니다.
+현재 선택된 데이터(`DIESEL_DATA_CSV`와 업로드 CSV 중 627행 이상이면서 마지막 날짜가 가장 최근인 파일의 최근 627행)입니다. 탐지 구간과 재학습 구간이 다를 수 있습니다.
 
 `DriftCheck.status`는 아래 6개만 사용합니다. 과거 `retrain_triggered`는 더 이상 사용하지 않습니다.
 AIOps 담당은 `fine_tune()` 결과를 이 상태로 전달하고, 원인을 `reasons`에 기록합니다.
@@ -206,7 +206,7 @@ AIOps 담당은 `fine_tune()` 결과를 이 상태로 전달하고, 원인을 `r
   `AIOPS_ALERT_WEBHOOK_URL`(비우면 `aiops.log`의 `[ALERT]`만), `AIOPS_ALERT_TIMEOUT`(5초), `AIOPS_ALERT_DEDUP_SECONDS`(3600),
   `RETRAIN_COOLDOWN_SECONDS`(600), `DIESEL_DATA_CSV`(재학습 데이터, 기본 `data/processed/diesel_features_2008_spliced.csv`).
 - 재학습 승격 후 자동 교체는 `MODEL_SOURCE=mlflow`에서만 됩니다. `local`은 레지스트리 버전을 서빙하지 않아 `reload`가 거절됩니다.
-- 재학습은 업로드 파일이 아니라 `DIESEL_DATA_CSV`의 마지막 627행을 읽습니다. 새 데이터를 반영하려면 그 파일을 갱신합니다(`dc cp`).
+- 재학습은 `DIESEL_DATA_CSV`와 업로드 CSV 중 627행 이상이면서 마지막 날짜가 가장 최근인 파일의 최근 627행을 읽습니다. 새 데이터는 대시보드·`/data/upload`로 올리거나 `DIESEL_DATA_CSV`를 갱신합니다(`dc cp`).
 - 모델이 없으면 서버는 뜨고 `/predict`만 503입니다(기본 lazy). eager는 시작 시 로드 실패가 바로 드러나지만, 모델이 준비된 뒤 전환합니다.
 
 ```bash
