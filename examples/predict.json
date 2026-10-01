@@ -1,122 +1,842 @@
 {
   "sequence": [
     {
-      "diesel_price": 1717.28,
-      "singapore_diesel_price": 75.37,
+      "date": "2025-01-01",
+      "diesel_price": 1600.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1350.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-02",
+      "diesel_price": 1600.7,
+      "singapore_diesel_price": 90.07,
+      "usd_krw": 1350.5,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-03",
+      "diesel_price": 1601.4,
+      "singapore_diesel_price": 90.13,
+      "usd_krw": 1351.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-04",
+      "diesel_price": 1602.1,
+      "singapore_diesel_price": 90.2,
+      "usd_krw": 1351.49,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-05",
+      "diesel_price": 1602.8,
+      "singapore_diesel_price": 90.26,
+      "usd_krw": 1351.99,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-06",
+      "diesel_price": 1603.4,
+      "singapore_diesel_price": 90.33,
+      "usd_krw": 1352.47,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-07",
+      "diesel_price": 1604.0,
+      "singapore_diesel_price": 90.39,
+      "usd_krw": 1352.96,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-08",
+      "diesel_price": 1604.6,
+      "singapore_diesel_price": 90.45,
+      "usd_krw": 1353.43,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-09",
+      "diesel_price": 1605.2,
+      "singapore_diesel_price": 90.51,
+      "usd_krw": 1353.89,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-10",
+      "diesel_price": 1605.7,
+      "singapore_diesel_price": 90.56,
+      "usd_krw": 1354.35,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-11",
+      "diesel_price": 1606.2,
+      "singapore_diesel_price": 90.62,
+      "usd_krw": 1354.79,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-12",
+      "diesel_price": 1606.7,
+      "singapore_diesel_price": 90.67,
+      "usd_krw": 1355.23,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-13",
+      "diesel_price": 1607.1,
+      "singapore_diesel_price": 90.72,
+      "usd_krw": 1355.65,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-14",
+      "diesel_price": 1607.4,
+      "singapore_diesel_price": 90.76,
+      "usd_krw": 1356.05,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-15",
+      "diesel_price": 1607.7,
+      "singapore_diesel_price": 90.8,
+      "usd_krw": 1356.44,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-16",
+      "diesel_price": 1608.0,
+      "singapore_diesel_price": 90.84,
+      "usd_krw": 1356.82,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-17",
+      "diesel_price": 1608.2,
+      "singapore_diesel_price": 90.88,
+      "usd_krw": 1357.17,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-18",
+      "diesel_price": 1608.4,
+      "singapore_diesel_price": 90.91,
+      "usd_krw": 1357.51,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-19",
+      "diesel_price": 1608.5,
+      "singapore_diesel_price": 90.93,
+      "usd_krw": 1357.83,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-20",
+      "diesel_price": 1608.5,
+      "singapore_diesel_price": 90.95,
+      "usd_krw": 1358.13,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-21",
+      "diesel_price": 1608.5,
+      "singapore_diesel_price": 90.97,
+      "usd_krw": 1358.41,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-22",
+      "diesel_price": 1608.5,
+      "singapore_diesel_price": 90.99,
+      "usd_krw": 1358.67,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-23",
+      "diesel_price": 1608.4,
+      "singapore_diesel_price": 90.99,
+      "usd_krw": 1358.91,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-24",
+      "diesel_price": 1608.3,
+      "singapore_diesel_price": 91.0,
+      "usd_krw": 1359.13,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-25",
+      "diesel_price": 1608.2,
+      "singapore_diesel_price": 91.0,
+      "usd_krw": 1359.32,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-26",
+      "diesel_price": 1608.0,
+      "singapore_diesel_price": 91.0,
+      "usd_krw": 1359.49,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-27",
+      "diesel_price": 1607.8,
+      "singapore_diesel_price": 90.99,
+      "usd_krw": 1359.64,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-28",
+      "diesel_price": 1607.5,
+      "singapore_diesel_price": 90.97,
+      "usd_krw": 1359.76,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-29",
+      "diesel_price": 1607.3,
+      "singapore_diesel_price": 90.96,
+      "usd_krw": 1359.85,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-30",
+      "diesel_price": 1607.0,
+      "singapore_diesel_price": 90.94,
+      "usd_krw": 1359.93,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-01-31",
+      "diesel_price": 1606.7,
+      "singapore_diesel_price": 90.91,
+      "usd_krw": 1359.97,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-01",
+      "diesel_price": 1606.4,
+      "singapore_diesel_price": 90.88,
+      "usd_krw": 1360.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-02",
+      "diesel_price": 1606.1,
+      "singapore_diesel_price": 90.85,
+      "usd_krw": 1360.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-03",
+      "diesel_price": 1605.8,
+      "singapore_diesel_price": 90.81,
+      "usd_krw": 1359.97,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-04",
+      "diesel_price": 1605.5,
+      "singapore_diesel_price": 90.77,
+      "usd_krw": 1359.92,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-05",
+      "diesel_price": 1605.2,
+      "singapore_diesel_price": 90.72,
+      "usd_krw": 1359.84,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-06",
+      "diesel_price": 1605.0,
+      "singapore_diesel_price": 90.68,
+      "usd_krw": 1359.74,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-07",
+      "diesel_price": 1604.8,
+      "singapore_diesel_price": 90.62,
+      "usd_krw": 1359.61,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-08",
+      "diesel_price": 1604.5,
+      "singapore_diesel_price": 90.57,
+      "usd_krw": 1359.46,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-09",
+      "diesel_price": 1604.4,
+      "singapore_diesel_price": 90.52,
+      "usd_krw": 1359.29,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-10",
+      "diesel_price": 1604.2,
+      "singapore_diesel_price": 90.46,
+      "usd_krw": 1359.09,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-11",
+      "diesel_price": 1604.1,
+      "singapore_diesel_price": 90.4,
+      "usd_krw": 1358.87,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-12",
+      "diesel_price": 1604.0,
+      "singapore_diesel_price": 90.33,
+      "usd_krw": 1358.63,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-13",
+      "diesel_price": 1604.0,
+      "singapore_diesel_price": 90.27,
+      "usd_krw": 1358.37,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-14",
+      "diesel_price": 1604.0,
+      "singapore_diesel_price": 90.21,
+      "usd_krw": 1358.08,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-15",
+      "diesel_price": 1604.1,
+      "singapore_diesel_price": 90.14,
+      "usd_krw": 1357.78,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-16",
+      "diesel_price": 1604.2,
+      "singapore_diesel_price": 90.07,
+      "usd_krw": 1357.46,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-17",
+      "diesel_price": 1604.4,
+      "singapore_diesel_price": 90.01,
+      "usd_krw": 1357.11,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-18",
+      "diesel_price": 1604.6,
+      "singapore_diesel_price": 89.94,
+      "usd_krw": 1356.75,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-19",
+      "diesel_price": 1604.9,
+      "singapore_diesel_price": 89.88,
+      "usd_krw": 1356.38,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-20",
+      "diesel_price": 1605.2,
+      "singapore_diesel_price": 89.81,
+      "usd_krw": 1355.98,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-21",
+      "diesel_price": 1605.6,
+      "singapore_diesel_price": 89.74,
+      "usd_krw": 1355.58,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-22",
+      "diesel_price": 1606.0,
+      "singapore_diesel_price": 89.68,
+      "usd_krw": 1355.16,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-23",
+      "diesel_price": 1606.4,
+      "singapore_diesel_price": 89.62,
+      "usd_krw": 1354.72,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-24",
+      "diesel_price": 1606.9,
+      "singapore_diesel_price": 89.56,
+      "usd_krw": 1354.27,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-25",
+      "diesel_price": 1607.5,
+      "singapore_diesel_price": 89.5,
+      "usd_krw": 1353.82,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-26",
+      "diesel_price": 1608.0,
+      "singapore_diesel_price": 89.44,
+      "usd_krw": 1353.35,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-27",
+      "diesel_price": 1608.7,
+      "singapore_diesel_price": 89.39,
+      "usd_krw": 1352.87,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-02-28",
+      "diesel_price": 1609.3,
+      "singapore_diesel_price": 89.34,
+      "usd_krw": 1352.39,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-01",
+      "diesel_price": 1609.9,
+      "singapore_diesel_price": 89.29,
+      "usd_krw": 1351.9,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-02",
+      "diesel_price": 1610.6,
+      "singapore_diesel_price": 89.24,
+      "usd_krw": 1351.41,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-03",
+      "diesel_price": 1611.3,
+      "singapore_diesel_price": 89.2,
+      "usd_krw": 1350.91,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-04",
+      "diesel_price": 1612.0,
+      "singapore_diesel_price": 89.16,
+      "usd_krw": 1350.42,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-05",
+      "diesel_price": 1612.7,
+      "singapore_diesel_price": 89.13,
+      "usd_krw": 1349.92,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-06",
+      "diesel_price": 1613.4,
+      "singapore_diesel_price": 89.1,
+      "usd_krw": 1349.42,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-07",
+      "diesel_price": 1614.1,
+      "singapore_diesel_price": 89.07,
+      "usd_krw": 1348.92,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-08",
+      "diesel_price": 1614.8,
+      "singapore_diesel_price": 89.05,
+      "usd_krw": 1348.42,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-09",
+      "diesel_price": 1615.4,
+      "singapore_diesel_price": 89.03,
+      "usd_krw": 1347.93,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-10",
+      "diesel_price": 1616.1,
+      "singapore_diesel_price": 89.02,
+      "usd_krw": 1347.44,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-11",
+      "diesel_price": 1616.7,
+      "singapore_diesel_price": 89.01,
+      "usd_krw": 1346.96,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-12",
+      "diesel_price": 1617.3,
+      "singapore_diesel_price": 89.0,
+      "usd_krw": 1346.49,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-13",
+      "diesel_price": 1617.8,
+      "singapore_diesel_price": 89.0,
+      "usd_krw": 1346.03,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-14",
+      "diesel_price": 1618.4,
+      "singapore_diesel_price": 89.0,
+      "usd_krw": 1345.57,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-15",
+      "diesel_price": 1618.8,
+      "singapore_diesel_price": 89.01,
+      "usd_krw": 1345.13,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-16",
+      "diesel_price": 1619.3,
+      "singapore_diesel_price": 89.02,
+      "usd_krw": 1344.7,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-17",
+      "diesel_price": 1619.7,
+      "singapore_diesel_price": 89.04,
+      "usd_krw": 1344.28,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-18",
+      "diesel_price": 1620.0,
+      "singapore_diesel_price": 89.06,
+      "usd_krw": 1343.88,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-19",
+      "diesel_price": 1620.3,
+      "singapore_diesel_price": 89.09,
+      "usd_krw": 1343.49,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-20",
+      "diesel_price": 1620.6,
+      "singapore_diesel_price": 89.12,
+      "usd_krw": 1343.12,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-21",
+      "diesel_price": 1620.8,
+      "singapore_diesel_price": 89.15,
+      "usd_krw": 1342.77,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-22",
+      "diesel_price": 1621.0,
+      "singapore_diesel_price": 89.19,
+      "usd_krw": 1342.43,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-23",
+      "diesel_price": 1621.0,
+      "singapore_diesel_price": 89.23,
+      "usd_krw": 1342.11,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-24",
+      "diesel_price": 1621.1,
+      "singapore_diesel_price": 89.27,
+      "usd_krw": 1341.82,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-25",
+      "diesel_price": 1621.1,
+      "singapore_diesel_price": 89.32,
+      "usd_krw": 1341.54,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-26",
+      "diesel_price": 1621.1,
+      "singapore_diesel_price": 89.37,
+      "usd_krw": 1341.28,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-27",
+      "diesel_price": 1621.0,
+      "singapore_diesel_price": 89.42,
+      "usd_krw": 1341.05,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-28",
+      "diesel_price": 1620.9,
+      "singapore_diesel_price": 89.48,
+      "usd_krw": 1340.84,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-29",
+      "diesel_price": 1620.7,
+      "singapore_diesel_price": 89.54,
+      "usd_krw": 1340.65,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-30",
+      "diesel_price": 1620.5,
+      "singapore_diesel_price": 89.6,
+      "usd_krw": 1340.48,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-03-31",
+      "diesel_price": 1620.3,
+      "singapore_diesel_price": 89.66,
+      "usd_krw": 1340.34,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-04-01",
+      "diesel_price": 1620.1,
+      "singapore_diesel_price": 89.72,
+      "usd_krw": 1340.22,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-04-02",
+      "diesel_price": 1619.8,
+      "singapore_diesel_price": 89.79,
+      "usd_krw": 1340.13,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-04-03",
+      "diesel_price": 1619.5,
+      "singapore_diesel_price": 89.85,
+      "usd_krw": 1340.06,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-04-04",
+      "diesel_price": 1619.2,
+      "singapore_diesel_price": 89.92,
+      "usd_krw": 1340.02,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-04-05",
+      "diesel_price": 1618.9,
+      "singapore_diesel_price": 89.98,
+      "usd_krw": 1340.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-04-06",
+      "diesel_price": 1618.6,
+      "singapore_diesel_price": 90.05,
+      "usd_krw": 1340.01,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-04-07",
+      "diesel_price": 1618.3,
+      "singapore_diesel_price": 90.12,
+      "usd_krw": 1340.04,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-04-08",
+      "diesel_price": 1618.0,
+      "singapore_diesel_price": 90.18,
+      "usd_krw": 1340.09,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-04-09",
+      "diesel_price": 1617.8,
+      "singapore_diesel_price": 90.25,
+      "usd_krw": 1340.18,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-04-10",
+      "diesel_price": 1617.5,
+      "singapore_diesel_price": 90.31,
+      "usd_krw": 1340.28,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2025-04-11",
+      "diesel_price": 1617.3,
+      "singapore_diesel_price": 90.37,
       "usd_krw": 1340.41,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1717.07,
-      "singapore_diesel_price": 75.44,
+      "date": "2025-04-12",
+      "diesel_price": 1617.1,
+      "singapore_diesel_price": 90.44,
       "usd_krw": 1340.56,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1716.9,
-      "singapore_diesel_price": 75.49,
+      "date": "2025-04-13",
+      "diesel_price": 1616.9,
+      "singapore_diesel_price": 90.49,
       "usd_krw": 1340.74,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1716.76,
-      "singapore_diesel_price": 75.55,
+      "date": "2025-04-14",
+      "diesel_price": 1616.8,
+      "singapore_diesel_price": 90.55,
       "usd_krw": 1340.94,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1716.66,
-      "singapore_diesel_price": 75.61,
+      "date": "2025-04-15",
+      "diesel_price": 1616.7,
+      "singapore_diesel_price": 90.61,
       "usd_krw": 1341.17,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1716.6,
-      "singapore_diesel_price": 75.66,
+      "date": "2025-04-16",
+      "diesel_price": 1616.6,
+      "singapore_diesel_price": 90.66,
       "usd_krw": 1341.41,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1716.59,
-      "singapore_diesel_price": 75.71,
+      "date": "2025-04-17",
+      "diesel_price": 1616.6,
+      "singapore_diesel_price": 90.71,
       "usd_krw": 1341.68,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1716.62,
-      "singapore_diesel_price": 75.75,
+      "date": "2025-04-18",
+      "diesel_price": 1616.6,
+      "singapore_diesel_price": 90.75,
       "usd_krw": 1341.96,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1716.7,
-      "singapore_diesel_price": 75.79,
+      "date": "2025-04-19",
+      "diesel_price": 1616.7,
+      "singapore_diesel_price": 90.79,
       "usd_krw": 1342.27,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1716.82,
-      "singapore_diesel_price": 75.83,
+      "date": "2025-04-20",
+      "diesel_price": 1616.8,
+      "singapore_diesel_price": 90.83,
       "usd_krw": 1342.6,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1717.0,
-      "singapore_diesel_price": 75.87,
+      "date": "2025-04-21",
+      "diesel_price": 1617.0,
+      "singapore_diesel_price": 90.87,
       "usd_krw": 1342.94,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1717.23,
-      "singapore_diesel_price": 75.9,
+      "date": "2025-04-22",
+      "diesel_price": 1617.2,
+      "singapore_diesel_price": 90.9,
       "usd_krw": 1343.31,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1717.5,
-      "singapore_diesel_price": 75.93,
+      "date": "2025-04-23",
+      "diesel_price": 1617.5,
+      "singapore_diesel_price": 90.93,
       "usd_krw": 1343.69,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1717.83,
-      "singapore_diesel_price": 75.95,
+      "date": "2025-04-24",
+      "diesel_price": 1617.8,
+      "singapore_diesel_price": 90.95,
       "usd_krw": 1344.08,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1718.2,
-      "singapore_diesel_price": 75.97,
+      "date": "2025-04-25",
+      "diesel_price": 1618.2,
+      "singapore_diesel_price": 90.97,
       "usd_krw": 1344.49,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1718.62,
-      "singapore_diesel_price": 75.98,
+      "date": "2025-04-26",
+      "diesel_price": 1618.6,
+      "singapore_diesel_price": 90.98,
       "usd_krw": 1344.92,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1719.09,
-      "singapore_diesel_price": 75.99,
+      "date": "2025-04-27",
+      "diesel_price": 1619.1,
+      "singapore_diesel_price": 90.99,
       "usd_krw": 1345.35,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1719.59,
-      "singapore_diesel_price": 76.0,
+      "date": "2025-04-28",
+      "diesel_price": 1619.6,
+      "singapore_diesel_price": 91.0,
       "usd_krw": 1345.8,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1720.13,
-      "singapore_diesel_price": 76.0,
+      "date": "2025-04-29",
+      "diesel_price": 1620.1,
+      "singapore_diesel_price": 91.0,
       "usd_krw": 1346.26,
       "tax_or_supply_feature": 0.0
     },
     {
-      "diesel_price": 1720.71,
-      "singapore_diesel_price": 76.0,
+      "date": "2025-04-30",
+      "diesel_price": 1620.7,
+      "singapore_diesel_price": 91.0,
       "usd_krw": 1346.73,
       "tax_or_supply_feature": 0.0
     }
