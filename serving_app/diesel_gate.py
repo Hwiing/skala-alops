@@ -11,7 +11,7 @@
 
 from math import isfinite
 
-WEEK1_RMSE_MAX = 50.0
+from data.contracts import HORIZONS, WEEK1_RMSE_MAX
 
 
 def check_gate(
@@ -21,15 +21,17 @@ def check_gate(
     values = [*rmse, *naive_rmse, *(production_rmse or [])]
     if not values or not all(isinstance(v, (int, float)) and isfinite(v) for v in values):
         return {"passed": False, "reasons": ["비유한 RMSE(NaN/Infinity) 또는 빈 값"]}
-    if len(rmse) != len(naive_rmse):
-        return {"passed": False, "reasons": ["모델과 naive의 주차 수가 다름"]}
+    if len(rmse) != HORIZONS or len(naive_rmse) != HORIZONS:
+        return {"passed": False, "reasons": ["모델과 naive는 각각 4개 주차 RMSE가 필요함"]}
+    if any(v < 0 for v in values):
+        return {"passed": False, "reasons": ["RMSE는 음수일 수 없음"]}
     reasons = []
     if rmse[0] > WEEK1_RMSE_MAX:
         reasons.append(f"1주차 RMSE {rmse[0]:.2f} > {WEEK1_RMSE_MAX:.0f}")
     for k, (m, n) in enumerate(zip(rmse, naive_rmse), start=1):
         if not m < n:
             reasons.append(f"{k}주차 RMSE {m:.2f} >= naive {n:.2f}")
-    if production_rmse:
+    if production_rmse is not None:
         if len(production_rmse) != len(rmse):
             return {"passed": False, "reasons": ["모델과 Production의 주차 수가 다름"]}
         mean, prod_mean = sum(rmse) / len(rmse), sum(production_rmse) / len(production_rmse)

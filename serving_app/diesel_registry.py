@@ -36,6 +36,8 @@ import pandas as pd  # noqa: E402
 from mlflow.exceptions import MlflowException  # noqa: E402
 from mlflow.tracking import MlflowClient  # noqa: E402
 
+from data.contracts import MODEL_ALIAS as ALIAS
+from data.contracts import MODEL_NAME
 from data.diesel_features import (  # noqa: E402
     DIESEL_COLUMNS,
     FEATURES,
@@ -56,9 +58,8 @@ from serving_app.diesel_training import (  # noqa: E402
     report,
     split_holdout,
 )
+from serving_app.schemas import FineTuneResult
 
-MODEL_NAME = "DieselPricePredictor"
-ALIAS = "champion"  # stage(Production)와 같은 버전을 가리키는 새 방식 주소
 FINE_TUNE_EPOCHS = 10
 FINE_TUNE_LR = 1e-4  # base 학습(1e-3)보다 낮게, 기존 지식을 유지하며 최근 패턴만 반영
 DEFAULT_CSV = "data/processed/diesel_features_2008_spliced.csv"
@@ -203,20 +204,18 @@ def train_and_register(
 
 def fine_tune(rows: list[dict]) -> dict:
     """#11 드리프트 재학습. rows: 최근 데이터(하루 간격, 최소 FINETUNE_MIN_ROWS행)."""
-    frame = DailyFrame(rows)
+    from data.contracts import validate_daily_rows
+
+    frame = DailyFrame(validate_daily_rows(rows))
     train_idx, val_idx = split_finetune(frame)  # 부족하면 ValueError("insufficient_data: ...")
     version = production_version(MlflowClient())
     if version is None:
         print(
             "[FINE-TUNE SKIPPED] Production 없음 → warm start 불가. 먼저 train_and_register()로 base 모델을 배포하세요"
         )
-        return {
-            "promoted": False,
-            "status": "no_production",
-            "rmse": None,
-            "naive_rmse": None,
-            "reasons": ["Production 없음"],
-        }
+        return FineTuneResult(
+            promoted=False, status="no_production", reasons=["Production 없음"]
+        ).model_dump(exclude_none=False)
     forecaster = load_forecaster(version)
     info = finetune(forecaster, frame, train_idx, FINE_TUNE_EPOCHS, FINE_TUNE_LR)
     meta = {
@@ -232,7 +231,7 @@ def fine_tune(rows: list[dict]) -> dict:
     print(report(meta))
     result = log_and_gate(forecaster, frame, val_idx, meta, run_name="diesel-fine-tune")
     result["status"] = "promoted" if result["promoted"] else "gate_failed"
-    return result
+    return FineTuneResult.model_validate(result).model_dump(exclude_none=False)
 
 
 def main():
