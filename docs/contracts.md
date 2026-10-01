@@ -8,8 +8,9 @@
 같은 `validate_daily_rows()`를 사용합니다. 변경 시 이 문서·요청 예시·계약 테스트를 함께 수정합니다.
 
 현재 입력 검증·주간 예측·배치 정답 연결·pyfunc 로더·승격 버전 확인은 구현됐습니다.
-**드리프트 계산·자동 재학습 트리거·운영자 알림은 아직 담당자 구현 대상**입니다.
-실모델이 없으면 예측은 503, AIOps TODO에 도달한 배치는 501을 반환합니다.
+드리프트 판정·자동 재학습 트리거·운영자 알림도 `/predict/batch-test`에 연결됐습니다.
+**실시간 `/predict` 기록·지연 정답 적재, 업로드 데이터의 재학습 반영은 아직 없습니다.**
+실모델이 없으면 예측은 503입니다.
 이 계약 정의가 전체 AIOps 데모 완료를 의미하지는 않습니다.
 
 ## 데이터와 모델 경계
@@ -186,6 +187,11 @@ AIOps 담당은 `fine_tune()` 결과를 이 상태로 전달하고, 원인을 `r
 - `restart`·`down`·재빌드 후에도 유지되고, `down -v`로만 삭제됩니다. `restart: unless-stopped`.
 - 이미지에는 데이터·모델을 넣지 않습니다(`data/processed`는 `.dockerignore` 제외). v2 모델은 실제 경유 CSV가 필요하며 `data/sample_diesel_prices.csv`(120행)로는 학습할 수 없습니다.
 - 호스트의 `mlflow.db`·`mlruns`는 공유하지 않습니다. 아티팩트 경로가 호스트 절대경로로 기록되어 컨테이너에서 찾을 수 없으므로 컨테이너 안에서 학습·등록합니다.
+- AIOps 설정은 호스트 환경변수로 넘깁니다(예: `AIOPS_ALERT_WEBHOOK_URL=<url> MODEL_SOURCE=mlflow dc up -d`).
+  `AIOPS_ALERT_WEBHOOK_URL`(비우면 `aiops.log`의 `[ALERT]`만), `AIOPS_ALERT_TIMEOUT`(5초), `AIOPS_ALERT_DEDUP_SECONDS`(3600),
+  `RETRAIN_COOLDOWN_SECONDS`(600), `DIESEL_DATA_CSV`(재학습 데이터, 기본 `data/processed/diesel_features_2008_spliced.csv`).
+- 재학습 승격 후 자동 교체는 `MODEL_SOURCE=mlflow`에서만 됩니다. `local`은 레지스트리 버전을 서빙하지 않아 `reload`가 거절됩니다.
+- 재학습은 업로드 파일이 아니라 `DIESEL_DATA_CSV`의 마지막 627행을 읽습니다. 새 데이터를 반영하려면 그 파일을 갱신합니다(`dc cp`).
 - 모델이 없으면 서버는 뜨고 `/predict`만 503입니다(기본 lazy). eager는 시작 시 로드 실패가 바로 드러나지만, 모델이 준비된 뒤 전환합니다.
 
 ```bash
