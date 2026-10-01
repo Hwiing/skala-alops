@@ -117,6 +117,10 @@ Production 가중치로 warm start하고 scaler는 재fit하지 않습니다. �
 `FineTuneResult`는 `status`, `promoted`, `rmse[4]`, `naive_rmse[4]`, `production_rmse[4] 또는 null`,
 `production_before`, `passed`, `reasons`, `run_id`, `version`을 정의합니다.
 선택 메타데이터는 null일 수 있습니다. 승격 시 `version`은 레지스트리 번호 문자열이며 필수입니다.
+공통 스키마의 `RegistryVersion`은 MLflow가 반환하는 양의 정수 버전도 입력으로 받습니다.
+`production_before`와 `version`은 검증 시 문자열로 정규화하고 JSON 응답에는 항상 문자열로
+내보냅니다. 기존 문자열 입력과 null은 유지하며, bool·float·0·음수 정수는 거부합니다.
+서빙 버전(`local`, `champion:<version>`)과 `reload.version`은 기존 문자열 계약을 유지합니다.
 
 | 재학습 status | promoted | 의미 |
 |---|---|---|
