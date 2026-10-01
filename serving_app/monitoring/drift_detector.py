@@ -2,12 +2,17 @@
 AIOps 1/3 (#15): 경유 v2 드리프트 판정 (docs/contracts.md "AIOps 상태와 서빙 교체").
 
     정답이 확보된 최근 PAIR_WINDOW(28)개 기준일에서
-        1주차 모델 RMSE  >  같은 기간 naive RMSE   →  drift
+        1주차 모델 RMSE  >  같은 기간 naive RMSE   그리고
+        1주차 모델 RMSE  >  DRIFT_MIN_RMSE(10원/L)  →  drift
 
     - naive = 기준일 가격을 1주 뒤에도 그대로 쓰는 "무변화 예측". 고정 임계값(예: 10원) 대신
       같은 기간 naive와 비교하면, 시장 급변으로 모두가 틀리는 시기와 "우리 모델만 망가진" 시기를
       구분할 수 있다. 배포 게이트 50원과 탐지 기준은 별개다.
     - 동점은 drift가 아니다 (게이트 통과 조건이 RMSE < naive이므로 경계값).
+    - 하한 10원/L (실측 백테스트로 추가, docs/evidence/aiops_15_판정기준_백테스트.md):
+      가격이 거의 고정된 시기(2019-08, 2026-06 최고가격제)에는 naive 오차가 1원 미만이라
+      모델 오차 1~2원으로도 "naive보다 나쁨"이 된다. 업무상 의미 없는 오차로 재학습하지 않도록
+      정상기 1주 naive 오차(약 10~13원)보다 작은 모델 오차는 drift로 보지 않는다.
 
 입력 짝 (HTTP BatchPair + 내부 기록용 선택 필드)
     {"date": "2026-04-30",                 # 입력 기준일
@@ -27,6 +32,7 @@ import math
 from data.contracts import HORIZONS, PAIR_WINDOW
 
 WINDOW_SIZE = PAIR_WINDOW
+DRIFT_MIN_RMSE = 10.0  # 원/L. 이보다 작은 1주차 오차는 naive보다 커도 drift로 보지 않는다
 WEEK1 = 0  # 드리프트 판정은 1주차(가장 빨리 정답이 오는 주차)로만 한다
 
 
@@ -79,7 +85,7 @@ def evaluate(pairs: list[dict]) -> dict:
     2) 가장 최근 짝의 model_version과 같은 버전의 짝만 쓴다 - 교체 전 모델 오차로 새 모델을 탓하지 않는다.
     3) 같은 기준일이 여러 번 들어오면 마지막 것 하나만 센다 - 배치 재전송으로 재집계하지 않는다.
     4) 1주차 정답이 온 짝만 쓰고, 미도착은 pending으로 센다.
-    5) 최근 28개로 모델 RMSE vs naive RMSE.
+    5) 최근 28개로 모델 RMSE vs naive RMSE (모델 RMSE가 하한 DRIFT_MIN_RMSE 이하면 ok).
     """
     for pair in pairs:
         reason = _validate_pair(pair)
@@ -98,6 +104,7 @@ def evaluate(pairs: list[dict]) -> dict:
     base = {
         "model_version": model_version,
         "window_size": WINDOW_SIZE,
+        "min_rmse": DRIFT_MIN_RMSE,
         "pending": len(same_model) - len(matured),
     }
     if len(matured) < WINDOW_SIZE:
@@ -114,7 +121,7 @@ def evaluate(pairs: list[dict]) -> dict:
     week1_rmse = compute_rmse(window)
     naive_rmse = compute_rmse(window, naive=True)
     return {
-        "status": "drift" if week1_rmse > naive_rmse else "ok",
+        "status": "drift" if week1_rmse > max(naive_rmse, DRIFT_MIN_RMSE) else "ok",
         "n": len(window),
         "week1_rmse": round(week1_rmse, 2),
         "naive_rmse": round(naive_rmse, 2),
