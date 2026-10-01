@@ -48,6 +48,11 @@ class PredictionWindow:
             self._records.sort(key=lambda r: r["date"])
             del self._records[: -self._max]
 
+    def record_batch(self, pairs: list[dict], model_version: str | None) -> None:
+        """batch_test의 BatchPair 목록(정답 포함)을 한 번에 기록한다."""
+        for p in pairs:
+            self.record(p["date"], p["predicted"], p["naive"], model_version, p["actual"], "batch")
+
     def fill_actual(self, date: str, week: int, value: float) -> bool:
         """지연 도착한 정답 채우기. week는 1~4. 해당 예측이 없으면 False."""
         if not 1 <= week <= HORIZONS:

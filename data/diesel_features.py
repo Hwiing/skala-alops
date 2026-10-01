@@ -10,37 +10,57 @@
 
 import csv
 from datetime import date, timedelta
-from math import isfinite, sqrt
+from math import sqrt
 from statistics import median
 
+from data.contracts import (
+    FEATURE_COLUMNS as DIESEL_COLUMNS,
+)
+from data.contracts import (
+    FINETUNE_MIN_ROWS,
+    FINETUNE_TRAIN_DAYS,
+    FINETUNE_VAL_DAYS,
+    GAP_WINDOW,
+    HORIZON_DAYS,
+    HORIZONS,
+    INPUT_DAYS,
+    validate_daily_rows,
+)
+from data.contracts import (
+    MODEL_SEQ_LEN as SEQ_LEN,
+)
 from data.diesel_policy import CapSchedule, TaxSchedule
 
-SEQ_LEN = 28
-GAP_WINDOW = 90
-INPUT_DAYS = 120  # SEQ_LEN + GAP_WINDOW - 1 = 117, 여유 3일
-HORIZONS = 4
+__all__ = [
+    "DIESEL_COLUMNS",
+    "INPUT_DAYS",
+    "SEQ_LEN",
+    "HORIZONS",
+    "GAP_WINDOW",
+    "FINETUNE_MIN_ROWS",
+    "FINETUNE_TRAIN_DAYS",
+    "FINETUNE_VAL_DAYS",
+    "FEATURES",
+    "WINDOWS",
+    "DailyFrame",
+    "FeatureScaler",
+    "build_windows",
+    "split_finetune",
+    "load_diesel_rows",
+]
+
 L_PER_BBL = 158.987
 IMPORT_LEVY = 16.0  # 석유 수입부과금 원/L
-DIESEL_COLUMNS = ("diesel_price", "singapore_diesel_price", "usd_krw", "tax_or_supply_feature")
 WINDOWS = [
-    range(7 * (k - 1) + 1, 7 * k + 1) for k in range(1, HORIZONS + 1)
+    range(HORIZON_DAYS * (k - 1) + 1, HORIZON_DAYS * k + 1) for k in range(1, HORIZONS + 1)
 ]  # k주 평균에 들어가는 날 오프셋
 FEATURES = ("dpt", "dc", "gap", "gap90", "pt_w1", "c_w1", "c_w2", "c_w3")
 
 
 def load_diesel_rows(path: str) -> list[dict]:
-    """정규화 CSV를 읽어 하루 간격·유한값을 확인한다. 상세 검증은 데이터 담당 로더(data/diesel.py)를 따른다."""
+    """데이터 생성·업로드와 같은 공통 검증으로 학습 CSV를 읽는다."""
     with open(path, encoding="utf-8-sig") as f:
-        rows = [
-            {"date": r["date"], **{k: float(r[k]) for k in DIESEL_COLUMNS}}
-            for r in csv.DictReader(f)
-        ]
-    for prev, cur in zip(rows, rows[1:]):
-        if date.fromisoformat(cur["date"]) != date.fromisoformat(prev["date"]) + timedelta(days=1):
-            raise ValueError(f"date는 하루 간격이어야 합니다: {prev['date']} → {cur['date']}")
-    if not all(isfinite(v) for r in rows for k, v in r.items() if k != "date"):
-        raise ValueError("피처에 NaN/Infinity를 사용할 수 없습니다")
-    return rows
+        return validate_daily_rows(list(csv.DictReader(f)))
 
 
 class DailyFrame:
@@ -179,15 +199,6 @@ def build_windows(frame: DailyFrame, indices) -> tuple[list, list, list]:
         if len(seq) == SEQ_LEN:
             X.append(seq), Y.append(y), kept.append(i)
     return X, Y, kept
-
-
-FINETUNE_TRAIN_DAYS = 365
-# 검증 90일: 28일이면 4주 예측 시험이 사실상 1번이라 쇼크 한 번에 판정이 뒤집힘(evidence/10)
-FINETUNE_VAL_DAYS = 90
-# 첫 학습일 전 문맥 116일 + 학습 타깃 365일 + 겹침 방지 28일 + 검증 타깃 90일 + 마지막 검증의 4주 정답 28일 = 627
-FINETUNE_MIN_ROWS = (
-    GAP_WINDOW + SEQ_LEN - 2 + FINETUNE_TRAIN_DAYS + 7 * HORIZONS + FINETUNE_VAL_DAYS + 7 * HORIZONS
-)
 
 
 def split_finetune(

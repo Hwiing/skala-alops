@@ -35,20 +35,40 @@ def make_pairs(n, model_err, naive_err, version="1", start=date(2026, 7, 1)):
 # ---------- compute_rmse ----------
 
 
-def test_rmse_basic_won_per_liter():
-    # 오차 3, -4 → sqrt((9+16)/2) = 3.5355
-    pairs = [{"predicted": 1503.0, "actual": 1500.0}, {"predicted": 1496.0, "actual": 1500.0}]
+def _pair(predicted, actual, naive=1500.0, day="2026-07-01"):
+    return {
+        "date": day,
+        "predicted": [predicted] + [1500.0] * 3,
+        "actual": [actual] + [1500.0] * 3,
+        "naive": naive,
+    }
+
+
+def test_rmse_basic_won_per_liter_week1_only():
+    # 1주차 오차 3, -4 → sqrt((9+16)/2). 2~4주차 값은 쓰지 않는다
+    pairs = [_pair(1503.0, 1500.0), _pair(1496.0, 1500.0)]
+    pairs[0]["predicted"][3] = 9999.0
     assert compute_rmse(pairs) == pytest.approx(math.sqrt(12.5))
+
+
+def test_rmse_naive_uses_same_pairs():
+    # naive 1490·1510, 실제 1500 → 10
+    pairs = [_pair(1500.0, 1500.0, naive=1490.0), _pair(1500.0, 1500.0, naive=1510.0)]
+    assert compute_rmse(pairs, naive=True) == pytest.approx(10.0)
+    assert compute_rmse(pairs) == 0.0
 
 
 def test_rmse_empty_is_zero():
     assert compute_rmse([]) == 0.0
+    assert compute_rmse([], naive=True) == 0.0
 
 
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf"), None, "1500"])
 def test_rmse_rejects_non_finite(bad):
     with pytest.raises(ValueError):
-        compute_rmse([{"predicted": bad, "actual": 1500.0}])
+        compute_rmse([_pair(bad, 1500.0)])
+    with pytest.raises(ValueError):
+        compute_rmse([_pair(1500.0, 1500.0, naive=bad)], naive=True)
 
 
 # ---------- evaluate: 정상 / 드리프트 / 경계 ----------
@@ -181,3 +201,57 @@ def test_window_pairs_returns_copies():
     w.record("2026-08-01", [1.0] * 4, 1.0, "3")
     w.pairs()[0]["actual"][0] = 999.0  # 바깥에서 고쳐도
     assert w.pairs()[0]["actual"][0] is None  # 내부 기록은 그대로
+
+
+def test_evaluate_counts_each_base_date_once():
+    pairs = make_pairs(WINDOW_SIZE, 60, 35)
+    resent = [dict(p) for p in pairs[-5:]]  # 배치 재전송
+    result = evaluate(pairs + resent)
+    assert result["status"] == "drift" and result["n"] == WINDOW_SIZE
+
+
+# ---------- 서빙 통합: /predict/batch-test → 내부 윈도우 → 실제 evaluate ----------
+
+
+class _ShiftModel:
+    """마지막 입력 가격 + shift를 4주 예측으로 낸다. shift가 크면 naive보다 나쁘다."""
+
+    def __init__(self, shift, version="champion:1"):
+        self.shift, self.version = shift, version
+
+    def predict(self, rows):
+        return [rows[-1]["diesel_price"] + self.shift] * 4
+
+
+@pytest.fixture
+def served(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from serving_app import model_loader
+    from serving_app.main import app
+    from serving_app.routers import predict as predict_router
+    from tests.test_scaffold import make_rows
+
+    monkeypatch.setattr(predict_router, "recent_predictions", PredictionWindow())
+    client = TestClient(app)
+
+    def post(model, n=175):
+        monkeypatch.setattr(model_loader, "_model_cache", model)
+        return client.post("/predict/batch-test", json={"rows": make_rows(n)})
+
+    return post, predict_router
+
+
+def test_batch_with_model_close_to_actual_is_ok(served):
+    post, router = served
+    # make_rows 가격은 하루 1원씩 상승: 1주 평균 실제 = 기준일 + 4, naive 오차 4원
+    response = post(_ShiftModel(4.0))
+    assert response.status_code == 200 and response.json()["drift_check"]["status"] == "ok"
+    assert router.recent_predictions.evaluate()["week1_rmse"] == 0.0
+
+
+def test_batch_with_bad_model_reaches_retrain_step(served):
+    post, router = served
+    response = post(_ShiftModel(60.0))  # 오차 56원 > naive 4원 → drift
+    assert router.recent_predictions.evaluate()["status"] == "drift"
+    assert response.status_code in (200, 501)  # 재학습 단계(#17)가 없으면 501
