@@ -730,6 +730,10 @@ function renderResult(data, servingVersion) {
     `<div class="metric"><dt>1주차 naive RMSE</dt><dd>${fmt(w1.naive)}<small>원/L</small></dd></div>`,
   ];
   // 재학습 모델의 검증 RMSE(1~4주 배열)는 재학습이 일어났을 때만 서버가 준다. 배포 게이트 한도와 비교.
+  // 서버 탐지 지표(기존 모델, 최근 28개 기준일 1주차). 재학습 검증 RMSE(check.rmse)와 구분한다.
+  if (typeof check.drift_rmse === "number") {
+    metrics.push(`<div class="metric"><dt>서버 탐지 1주차 RMSE / naive</dt><dd>${fmt(check.drift_rmse)}<small>/ ${fmt(check.drift_naive_rmse)}</small></dd></div>`);
+  }
   const retrained = check.promoted === true || check.status === "gate_failed";
   if (retrained && Array.isArray(check.rmse)) {
     metrics.push(`<div class="metric"><dt>재학습 모델 1주차 RMSE (게이트 ≤ ${GATE_WEEK1_MAX})</dt><dd>${fmt(check.rmse[0])}<small>원/L</small></dd></div>`);

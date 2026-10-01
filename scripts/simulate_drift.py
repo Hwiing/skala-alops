@@ -18,6 +18,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data.contracts import BATCH_MIN_ROWS
 from data.features import load_rows
 from data.storage import latest_upload
 
@@ -33,7 +34,7 @@ def compute_baseline_stats(csv_path: str | None = None) -> tuple[float, float]:
 
 # 입력 120 + 짝 28 − 1 + 4주 정답 28 = 175개를 보내야 배치 하나당 기준일 28개의
 # {date, predicted[4], actual[4], naive} 짝이 쌓인다 (serving_app/schemas.py BATCH_MIN_ROWS).
-BATCH_N = 175
+BATCH_N = BATCH_MIN_ROWS
 
 # 학습 데이터(합성 데모; 실측 변동성 교체 TODO)는 추세·모멘텀이 있는 시계열이라, 평균 주변의 순수
 # 백색잡음(iid noise)을 넣으면 "정상" 입력조차 모델이 못 맞춰 오탐(false positive)이

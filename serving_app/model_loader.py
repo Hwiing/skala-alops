@@ -22,9 +22,8 @@ import os
 import threading
 import time
 
-LOCAL_PYFUNC_PATH = "serving_app/models/diesel_pyfunc"
-MODEL_NAME = "DieselPricePredictor"
-ALIAS = "champion"
+from data.contracts import LOCAL_PYFUNC_PATH, MODEL_NAME
+from data.contracts import MODEL_ALIAS as ALIAS
 
 _model_cache = None  # Lazy Loading 캐시
 _reload_lock = threading.Lock()

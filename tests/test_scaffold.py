@@ -185,7 +185,13 @@ def test_batch_keeps_only_latest_window(batch):
 
 
 def test_batch_promoted_reloads_promoted_version_and_clears_window(batch):
-    batch.state["trigger"] = {"status": "promoted", "promoted": True, "version": "2"}
+    batch.state["trigger"] = {
+        "status": "promoted",
+        "promoted": True,
+        "version": "2",
+        "rmse": [1.0] * 4,
+        "naive_rmse": [2.0] * 4,
+    }
 
     response = batch.post()
 
@@ -196,7 +202,13 @@ def test_batch_promoted_reloads_promoted_version_and_clears_window(batch):
 
 
 def test_batch_reload_failure_keeps_window(batch):
-    batch.state["trigger"] = {"status": "promoted", "promoted": True, "version": "2"}
+    batch.state["trigger"] = {
+        "status": "promoted",
+        "promoted": True,
+        "version": "2",
+        "rmse": [1.0] * 4,
+        "naive_rmse": [2.0] * 4,
+    }
     batch.state["reload"] = {"reloaded": False, "version": "champion:1", "error": "boom"}
 
     response = batch.post()
@@ -206,7 +218,12 @@ def test_batch_reload_failure_keeps_window(batch):
 
 
 def test_batch_not_promoted_skips_reload(batch):
-    batch.state["trigger"] = {"status": "gate_failed", "promoted": False}
+    batch.state["trigger"] = {
+        "status": "gate_failed",
+        "promoted": False,
+        "rmse": [3.0] * 4,
+        "naive_rmse": [2.0] * 4,
+    }
 
     response = batch.post()
 

@@ -6,14 +6,18 @@ POST /predict/batch-test - 드리프트 감지 시뮬레이션 시작점 (script
 from datetime import date, timedelta
 
 from fastapi import APIRouter, HTTPException
+from pydantic import ValidationError
 
 from data.diesel_features import INPUT_DAYS, WINDOWS
 from serving_app import model_loader
 from serving_app.monitoring import retrain_trigger
 from serving_app.schemas import (
     PAIR_WINDOW,
+    BatchPair,
     BatchTestRequest,
     BatchTestResponse,
+    DriftCheck,
+    PredictionValues,
     PredictRequest,
     PredictResponse,
     WeekPrediction,
@@ -48,6 +52,13 @@ def _weeks(base: date, values: list[float]) -> list[WeekPrediction]:
     ]
 
 
+def _predict_values(model, rows: list[dict]) -> list[float]:
+    try:
+        return PredictionValues(values=model.predict(rows)).values
+    except (ValidationError, ValueError, TypeError) as exc:
+        raise HTTPException(503, "모델 출력이 경유 4주 예측 계약에 맞지 않습니다") from exc
+
+
 def _pair_with_actual(model, rows: list[dict]) -> list[dict]:
     """rows[i:i+120]마다 1~4주를 예측하고, 기준일 뒤 k주 실제 평균·naive(기준일 가격)를 붙인다."""
     prices = [r["diesel_price"] for r in rows]
@@ -56,25 +67,29 @@ def _pair_with_actual(model, rows: list[dict]) -> list[dict]:
         pairs.append(
             {
                 "date": rows[b]["date"],
-                "predicted": [round(v, 2) for v in model.predict(rows[b - INPUT_DAYS + 1 : b + 1])],
+                "predicted": [
+                    round(v, 2) for v in _predict_values(model, rows[b - INPUT_DAYS + 1 : b + 1])
+                ],
                 "actual": [round(sum(prices[b + d] for d in w) / 7, 2) for w in WINDOWS],
                 "naive": prices[b],
             }
         )
-    return pairs
+    return [BatchPair.model_validate(p).model_dump(mode="json") for p in pairs]
 
 
 @router.post("/predict", response_model=PredictResponse)
 def predict(req: PredictRequest):
     model = _get_model_or_503()
     base = req.sequence[-1].date
-    values = model.predict([p.model_dump(mode="json") for p in req.sequence])
+    values = _predict_values(model, [p.model_dump(mode="json") for p in req.sequence])
     return PredictResponse(
         predictions=_weeks(base, values), base_date=base, model_version=model.version
     )
 
 
-@router.post("/predict/batch-test", response_model=BatchTestResponse)
+@router.post(
+    "/predict/batch-test", response_model=BatchTestResponse, response_model_exclude_none=True
+)
 def batch_test(req: BatchTestRequest):
     """기준일을 하루씩 밀며 1~4주를 예측하고 AIOps 판정(check_and_trigger)을 돌려준다.
 
@@ -87,12 +102,20 @@ def batch_test(req: BatchTestRequest):
     del recent_predictions[:-PAIR_WINDOW]
 
     try:
-        drift_check = retrain_trigger.check_and_trigger(recent_predictions)
+        drift_check = DriftCheck.model_validate(
+            retrain_trigger.check_and_trigger(recent_predictions)
+        ).model_dump(exclude_none=True)
     except NotImplementedError as exc:
         raise HTTPException(501, f"AIOps 판정 미구현: {exc}") from exc
+    except ValidationError as exc:
+        raise HTTPException(503, "AIOps 결과가 공통 계약에 맞지 않습니다") from exc
 
     if drift_check.get("promoted"):
         drift_check["reload"] = model_loader.reload_model(drift_check.get("version"))
+        try:
+            DriftCheck.model_validate(drift_check)
+        except ValidationError as exc:
+            raise HTTPException(503, "모델 교체 결과가 공통 계약에 맞지 않습니다") from exc
         if drift_check["reload"]["reloaded"]:
             recent_predictions.clear()
 

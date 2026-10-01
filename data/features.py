@@ -14,32 +14,14 @@ Day1 baseline 학습(scripts/train_baseline_v1.py), Day2 MLflow 학습
 import csv
 import pickle
 
-SEQ_LEN = 20
-FEATURE_COLUMNS = ("diesel_price", "singapore_diesel_price", "usd_krw", "tax_or_supply_feature")
+from data.contracts import FEATURE_COLUMNS, validate_daily_rows
+
+SEQ_LEN = 20  # 개인 실습 v1 전용. 공개 API는 data.contracts.INPUT_DAYS를 사용한다.
 
 
 def validate_rows(rows: list[dict]) -> list[dict]:
-    """공통 정규화 CSV 계약. 오피넷 원본 변환/외부 지표 병합은 데이터 담당 TODO."""
-    from datetime import date, timedelta
-    from math import isfinite
-
-    result = []
-    previous = None
-    for row in rows:
-        missing = [key for key in ("date", *FEATURE_COLUMNS) if row.get(key) in (None, "")]
-        if missing:
-            raise ValueError(f"필수 값이 비어 있습니다: {missing} (행: {row.get('date')})")
-        day = date.fromisoformat(row["date"])
-        if previous is not None and day != previous + timedelta(days=1):
-            raise ValueError("date는 중복/누락 없이 하루 간격 오름차순이어야 합니다")
-        point = {key: float(row[key]) for key in FEATURE_COLUMNS}
-        if not all(isfinite(value) for value in point.values()):
-            raise ValueError("피처에 NaN/Infinity를 사용할 수 없습니다")
-        if any(point[key] <= 0 for key in FEATURE_COLUMNS[:3]):
-            raise ValueError("가격과 환율은 양수여야 합니다")
-        result.append({"date": day.isoformat(), **point})
-        previous = day
-    return result
+    """data.contracts의 공통 CSV 검증을 사용하는 기존 호출 이름."""
+    return validate_daily_rows(rows)
 
 
 def load_rows(csv_path: str) -> list[dict]:
