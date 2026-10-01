@@ -1,6 +1,34 @@
 # 공통 데이터·API·운영 계약
 
-## 데이터
+## v2 경유 주간 예측 (#28 합의 대상)
+
+v2가 합의·구현되기 전까지 실제 코드는 아래 **v1(휘발유 다음날)** 을 따릅니다. 각 담당은 자기 v2 PR이 main에 들어갈 때 v1 항목을 지웁니다.
+근거: [`docs/evidence/06`](evidence/06_데이터분석_결과.md) §11~13, [`09`](evidence/09_싱가포르경유_0.05접합_근거.md). LSTM이 정상기(2016·19·22·25)와 2026 모두 1~4주차에서 naive보다 RMSE가 낮고, 정상기 1~4주·2026 2~4주는 Diebold-Mariano 검정으로 유의(p<0.05)합니다.
+
+| 항목 | v1 (현재) | v2 (변경) | 담당 |
+|---|---|---|---|
+| 예측 대상 | 다음날 휘발유 가격 | **다음 1·2·3·4주 경유 평균가**(원/L) 4개를 한 번에 출력. k주 = D+7(k−1)+1 ~ D+7k일, D = 마지막 입력일 | 전원 |
+| CSV 컬럼 | `date,gasoline_price,crude_oil_price,usd_krw,tax_or_supply_feature` | `date,diesel_price,singapore_diesel_price,usd_krw,tax_or_supply_feature` | 유나 |
+| 국제가격 | 두바이유, D-1 | 싱가포르 경유 0.001%(USD/bbl), D-1. 2012-12-02 이전은 0.05% + 1.479667 USD/bbl 접합 | 유나 |
+| 기간 | 2023-09 ~ | **2008-04-15 ~** | 유나 |
+| 정책표 | 없음 | `data/reference/diesel_fuel_tax_cut.csv`(유류세), `data/reference/price_cap.csv`(최고가격: 시행일·종료일·상한·발표일). 모델이 예측 때 읽음. 정책이 발표되면 표만 갱신, 재학습 불필요 | 유나(세금), 소영(상한) |
+| API 입력 | `sequence` 20개, 날짜 없음 | **최근 120일**, 행마다 `date` 포함(오래된 날 → 최근 날). 정책표 조회에 날짜 필요 | 준형 |
+| API 출력 | `predicted_price` | `predictions`: `[{horizon_week, start_date, end_date, predicted_avg_price}] × 4`, `base_date`, `model_version` | 준형 |
+| 모델 | `GasolinePricePredictor`(Keras) | `DieselPricePredictor`, MLflow pyfunc 1개(LSTM + scaler + 정책 규칙). 서빙은 `predict()`만 호출 | 소영 → 준형 |
+| naive | 직전 날 가격 | 마지막 입력일 가격을 1~4주 모두에 사용 | 소영 |
+| 배포 게이트 | `RMSE ≤ 10 AND RMSE < naive` | **1주차 `RMSE ≤ 50` AND 1~4주 모두 `RMSE < naive_rmse` AND 1주차 `RMSE ≤ Production RMSE`**(Production이 있을 때, 같은 검증 구간). 비유한 값 거부 | 소영·동찬 |
+| 드리프트 (제안) | 최근 21건 RMSE > 10 | 정답이 확보된 최근 28일의 **1주차 RMSE > 같은 기간 naive RMSE**(1주차 정답은 7일 뒤 확보) | 동찬 |
+| fine-tuning | 최근 30일, 80:20 분할 | 최근 365일로 Production에서 warm start, 학습에 쓰지 않은 최근 28일로 검증, 게이트 동일, 반환 `{promoted, rmse, naive_rmse, version?}` 유지 | 소영 → 동찬 |
+| 배치·업로드 최소 행 | 41행, `rows[i:i+20]` | **148행**(입력 120 + 4주 정답 28), `rows[i:i+120]` 예측 → 다음 1~4주 실제 평균과 비교 | 준형·동찬 |
+
+게이트 수치 근거
+- 50원: 화물 안전운임제는 3개월 평균 경유가가 ±50원 이상 변하면 운임을 다시 고시합니다. 운송업계가 결정을 바꾸는 단위이므로 1주 예측 오차의 업무 허용 한도로 씁니다. 10원은 다음날 휘발유(naive 3~8원) 기준이라 주간 예측에 맞지 않습니다(2026 검증 구간 1주차 naive 34.6원).
+- naive 비교: 유가 예측 연구의 표준 평가(무변화 예측 대비 오차 비율 < 1).
+- Production 비교: 새 모델이 현재 서비스 모델보다 나쁠 때 교체하지 않습니다.
+
+## v1 휘발유 다음날 예측 (현재 코드)
+
+### 데이터
 
 정규화 CSV와 입력 피처 순서는 다음과 같습니다. 오피넷 원본 파일은 데이터 담당자가 이 형식으로 변환합니다.
 
@@ -20,7 +48,7 @@ API sequence는 가장 오래된 날부터 최근 날까지 20개이며 날짜�
 학습·추론 모두 `FEATURE_COLUMNS` 순서로 `(N,20,4)`를 구성하고 마지막 입력 다음날 가격을 예측합니다.
 CSV 업로드 최소 41행은 시뮬레이션 21건 확보 기준이며 충분한 학습량을 의미하지 않습니다.
 
-## API
+### API
 
 | Method | URL | 요청 / 응답 | 뼈대 상태 |
 |---|---|---|---|
@@ -38,7 +66,7 @@ CSV 업로드 최소 41행은 시뮬레이션 21건 확보 기준이며 충분�
 배치에서 `rows[i:i+20]`으로 예측하고 `rows[i+20].gasoline_price`를 실제값으로 사용합니다.
 응답 `model_version`은 로컬 `v1-local`; MLflow 구현 후 `production:<실제 등록 버전>`으로 식별합니다.
 
-## 모델·운영
+### 모델·운영
 
 - 배포 게이트: 원/L 기준 `RMSE <= 10 AND RMSE < naive_rmse`. 두 지표는 같은 시간순 검증 타깃으로 계산하며 비유한 값은 거부합니다.
 - naive는 직전 날 가격. scaler는 baseline 학습 구간에만 fit, 이후 transform만 합니다.
