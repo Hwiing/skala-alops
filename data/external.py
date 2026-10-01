@@ -48,17 +48,19 @@ def load_opinet_crude(path: str, column: str = CRUDE_COLUMN) -> list[tuple[date,
     return series
 
 
-def load_opinet_singapore_diesel(paths: list[str]) -> list[tuple[date, float]]:
-    """오피넷 싱가포르 경유(0.001%) 가격을 USD/bbl로 읽고 휴장일을 건너뛴다."""
+def load_opinet_singapore_diesel(
+    paths: list[str], column: str = SINGAPORE_DIESEL_COLUMN
+) -> list[tuple[date, float]]:
+    """오피넷 싱가포르 경유 가격을 USD/bbl로 읽고 휴장일을 건너뛴다."""
     if not paths:
         raise ValueError("싱가포르 경유 원본 파일이 없습니다")
     rows = []
     for path in paths:
         part = read_csv_text(path)
-        if not part or SINGAPORE_DIESEL_COLUMN not in part[0]:
-            raise ValueError(f"{path}: {SINGAPORE_DIESEL_COLUMN!r} 컬럼이 없습니다")
-        rows.extend(row for row in part if str(row.get(SINGAPORE_DIESEL_COLUMN) or "").strip())
-    series = parse_series(rows, "기간", SINGAPORE_DIESEL_COLUMN)
+        if not part or column not in part[0]:
+            raise ValueError(f"{path}: {column!r} 컬럼이 없습니다")
+        rows.extend(row for row in part if str(row.get(column) or "").strip())
+    series = parse_series(rows, "기간", column)
     for day, price in series:
         if price <= 0 or price > MAX_SINGAPORE_DIESEL_USD_PER_BBL:
             raise ValueError(
@@ -75,6 +77,38 @@ def load_usd_krw(path: str) -> list[tuple[date, float]]:
         if rate <= 0:
             raise ValueError(f"{day} 환율이 양수가 아닙니다: {rate}")
     return series
+
+
+def load_ecos_wide_usd_krw(path: str) -> list[tuple[date, float]]:
+    """ECOS 웹사이트 CSV(날짜가 열인 형식)에서 원/미국달러 행만 읽는다."""
+    rows = read_csv_text(path)
+    matches = [row for row in rows if row.get("계정항목") == "원/미국달러(매매기준율)"]
+    if len(matches) != 1 or matches[0].get("단위") != "원":
+        raise ValueError("ECOS 원/미국달러(매매기준율), 단위 원 행이 정확히 하나여야 합니다")
+    row = matches[0]
+    series = parse_series(
+        [
+            {"date": key, "usd_krw": value}
+            for key, value in row.items()
+            if key not in ("통계표", "계정항목", "단위", "변환") and str(value or "").strip()
+        ],
+        "date",
+        "usd_krw",
+    )
+    if any(rate <= 0 for _, rate in series):
+        raise ValueError("ECOS 환율은 양수여야 합니다")
+    return series
+
+
+def merge_observed_series(*series: list[tuple[date, float]]) -> list[tuple[date, float]]:
+    """기간별 실측을 합치되 겹치는 날짜 값이 다르면 중단한다."""
+    by_day = {}
+    for part in series:
+        for day, value in part:
+            if day in by_day and by_day[day] != value:
+                raise ValueError(f"{day} 실측값이 원본 파일 사이에서 다릅니다")
+            by_day[day] = value
+    return sorted(by_day.items())
 
 
 def load_tax_policy(path: str = TAX_POLICY_PATH) -> list[tuple[date, date, float]]:
