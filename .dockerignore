@@ -15,3 +15,9 @@ logs
 mlruns
 mlartifacts
 *.db
+
+# 실측·전달 데이터는 이미지에 넣지 않는다(컨테이너에는 dc cp로 전달). 런타임에 필요한 정책표와 120행 합성 예제만 포함.
+data/diesel-team-handoff-*
+data/**/*.csv
+!data/reference/*.csv
+!data/sample_diesel_prices.csv

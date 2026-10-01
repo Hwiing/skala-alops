@@ -9,7 +9,8 @@
 
 현재 입력 검증·주간 예측·배치 정답 연결·pyfunc 로더·승격 버전 확인은 구현됐습니다.
 드리프트 판정·자동 재학습 트리거·운영자 알림도 `/predict/batch-test`에 연결됐습니다.
-**실시간 `/predict` 기록·지연 정답 적재, 업로드 데이터의 재학습 반영은 아직 없습니다.**
+실시간 `/predict` 기록과 `/data/upload`의 지연 정답 적재·판정도 연결됐습니다.
+**업로드 파일을 재학습 데이터로 쓰는 것은 아직 아닙니다**(재학습은 `DIESEL_DATA_CSV`).
 실모델이 없으면 예측은 503입니다.
 이 계약 정의가 전체 AIOps 데모 완료를 의미하지는 않습니다.
 
@@ -50,7 +51,7 @@ CSV의 추가 열은 공통 피처에서 제외합니다. API의 추가 JSON 필
 | Method | URL | 요청 / 응답 | 오류 |
 |---|---|---|---|
 | GET | `/health` | `status`, `contract_version`, `model_loaded`, `model_version`, `model_source`, `loading_mode` | liveness이며 lazy 첫 추론 전 `model_loaded=false`는 정상 |
-| POST | `/data/upload` | UTF-8/BOM CSV 최소 175행 → `filename`, `rows`, `filled`(실시간 예측에 채운 주차 정답 수), 채운 정답이 있으면 `drift_check` | 인코딩·컬럼·행 수·데이터 검증 실패 400, 판정은 batch-test와 같은 501/503 |
+| POST | `/data/upload` | UTF-8/BOM CSV 최소 175행 → `filename`, `rows`, `filled`(실시간 예측에 채운 주차 정답 수), 판정했으면 `drift_check`, 판정이 실패했으면 `drift_check_error{status_code, detail}` | 인코딩·컬럼·행 수·데이터 검증 실패 400. 판정 오류는 파일 저장·정답 적재가 끝났으므로 200 + `drift_check_error` |
 | GET | `/data/status` | `exists`, 파일명·기간·행 수·가격 범위 | 데이터가 없으면 `exists:false` |
 | POST | `/predict` | `PredictRequest` → `PredictResponse`. 성공 시 예측 기록에 정답 없이 남김(`source=live`) | 입력 422, 모델 미준비/모델 출력 계약 위반 503 |
 | POST | `/predict/batch-test` | `BatchTestRequest` → `BatchTestResponse` | 입력 422, 모델 미준비/결과 계약 위반 503, AIOps 미구현 501 |
@@ -139,6 +140,16 @@ Production 가중치로 warm start하고 scaler는 재fit하지 않습니다. �
 판정은 두 경로에서 실행됩니다. `/predict/batch-test`는 과거 데이터라 정답과 함께 기록(`source=batch`)하고 바로 판정합니다.
 실시간 `/predict`는 정답 없이 기록(`source=live`)하고, 이후 `/data/upload`의 일별 가격이 k주 7일을 모두 덮으면
 그 주 평균을 정답으로 채운 뒤 판정합니다. 7일 중 하루라도 없으면 그 주는 비워 둡니다. 판정은 최신 모델 버전의 기록만 씁니다.
+같은 기준일을 다시 예측하면 예측값만 바뀌고 채워 둔 정답은 유지됩니다(정답은 시장 실제값).
+
+업로드는 새 정답이 없어도 **이전 판정이 끝나지 않았으면 다시 판정**합니다. 끝나지 않은 경우는 판정 오류(501/503),
+`retrain_failed`(학습 예외·쿨다운·다른 재학습 진행 중), 승격 뒤 교체 실패입니다. 같은 판정은 AIOps가 학습을 끝낸 결정
+(`promoted`·`gate_failed`)을 재사용하므로, 교체 실패 뒤 같은 CSV를 다시 올리면 재학습 없이 교체만 다시 시도합니다.
+학습 예외·데이터 부족·Production 없음은 재사용하지 않고 쿨다운(`RETRAIN_COOLDOWN_SECONDS`) 뒤 다시 학습합니다.
+업로드 판정은 스레드풀에서 실행되어 재학습(수십 초) 중에도 `/health`·`/predict`는 응답합니다.
+
+**시연 경계:** 과거 날짜 배치나 업로드로 드리프트를 만들어도 재학습 데이터는 그 시점이 아니라
+현재 `DIESEL_DATA_CSV`의 최신 627행입니다. 탐지 구간과 재학습 구간이 다를 수 있습니다.
 
 `DriftCheck.status`는 아래 6개만 사용합니다. 과거 `retrain_triggered`는 더 이상 사용하지 않습니다.
 AIOps 담당은 `fine_tune()` 결과를 이 상태로 전달하고, 원인을 `reasons`에 기록합니다.
