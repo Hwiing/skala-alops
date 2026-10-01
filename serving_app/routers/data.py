@@ -6,6 +6,7 @@ import os
 from uuid import uuid4
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from data.contracts import BATCH_MIN_ROWS, CSV_COLUMNS
 from data.diesel import validate_diesel_rows
@@ -24,6 +25,11 @@ MIN_ROWS = (
 @router.post("/upload")
 async def upload(file: UploadFile = File(...)):
     raw = await file.read()
+    # 검증·디스크 저장·정답 채우기·재학습 모두 작업 스레드에서 수행한다.
+    return await run_in_threadpool(_process_upload, raw)
+
+
+def _process_upload(raw: bytes) -> dict:
     try:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -43,8 +49,14 @@ async def upload(file: UploadFile = File(...)):
 
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     dest = os.path.join(UPLOAD_DIR, f"diesel_{uuid4().hex}.csv")
-    with open(dest, "w", encoding="utf-8", newline="") as f:
-        f.write(text)
+    pending = dest + ".pending"
+    try:
+        with open(pending, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+        os.replace(pending, dest)  # 재학습은 완전히 저장된 CSV만 읽는다.
+    finally:
+        if os.path.exists(pending):
+            os.remove(pending)
 
     # 업로드는 실시간 예측의 지연 정답이기도 하다. 새로 채운 정답이 있을 때만 판정한다.
     filled = predict_router.fill_live_actuals(rows)

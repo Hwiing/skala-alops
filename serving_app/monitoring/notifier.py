@@ -25,6 +25,7 @@ import threading
 import time
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import Path
 
 logger = logging.getLogger("aiops")
 
@@ -50,13 +51,21 @@ def build_alert(result: dict) -> dict | None:
     week1, naive = det.get("week1_rmse"), det.get("naive_rmse")
     cause = f"1주차 RMSE {week1:.2f} > 같은 기간 naive RMSE {naive:.2f}"
     reasons = [r for r in result.get("reasons") or [] if not r.startswith("탐지:")]
-    if status == "promoted":
+    reload = result.get("reload")
+    if reload is not None:
+        status = "reloaded" if reload["reloaded"] else "reload_failed"
+        action = (
+            f"서빙 교체 완료: {reload['version']}"
+            if reload["reloaded"]
+            else f"서빙 교체 실패, 기존 모델 유지: {reload.get('error')}"
+        )
+    elif status == "promoted":
         action = f"새 모델 v{result.get('version')} 승격 (서빙 교체는 batch_test reload 결과 확인)"
     else:
         action = "기존 Production 유지: " + ("; ".join(reasons) or status)
     return {
         "time": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
-        "level": ALERT_STATUSES[status],
+        "level": "ERROR" if status == "reload_failed" else ALERT_STATUSES[result["status"]],
         "status": status,
         "cause": cause,
         "week1_rmse": week1,
@@ -66,6 +75,7 @@ def build_alert(result: dict) -> dict | None:
         "new_version": result.get("version"),
         "new_rmse": result.get("rmse"),
         "action": action,
+        "reload": reload,
     }
 
 
@@ -83,6 +93,22 @@ class LogAdapter:
 
     def send(self, alert: dict) -> None:
         logger.warning("[ALERT] " + format_text(alert).replace("\n", " | "))
+
+
+class JsonlAdapter:
+    """외부 계정 없이 쓰는 영속 운영자 수신함. 기본 파일은 /logs/alerts.jsonl에서 조회한다."""
+
+    name = "inbox"
+
+    def __init__(self, path: str = "logs/alerts.jsonl"):
+        self.path = Path(path)
+        self._lock = threading.Lock()
+
+    def send(self, alert: dict) -> None:
+        with self._lock:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(alert, ensure_ascii=False) + "\n")
 
 
 class WebhookAdapter:
@@ -138,7 +164,10 @@ class OperatorNotifier:
 
 
 def from_env() -> OperatorNotifier:
-    adapters: list = [LogAdapter()]
+    adapters: list = [
+        LogAdapter(),
+        JsonlAdapter(os.getenv("AIOPS_ALERT_FILE", "logs/alerts.jsonl")),
+    ]
     url = os.getenv("AIOPS_ALERT_WEBHOOK_URL")
     if url:
         adapters.append(WebhookAdapter(url, float(os.getenv("AIOPS_ALERT_TIMEOUT", "5"))))

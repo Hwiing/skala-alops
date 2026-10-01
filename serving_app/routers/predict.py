@@ -142,6 +142,7 @@ def judge_and_swap() -> dict:
             DriftCheck.model_validate(drift_check)
         except ValidationError as exc:
             raise HTTPException(503, "모델 교체 결과가 공통 계약에 맞지 않습니다") from exc
+        retrain_trigger.notify_reload(drift_check, recent_predictions.pairs())
         if drift_check["reload"]["reloaded"]:
             recent_predictions.clear()
     return drift_check
