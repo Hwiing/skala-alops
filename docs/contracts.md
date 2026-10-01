@@ -1,85 +1,170 @@
 # 공통 데이터·API·운영 계약
 
-## v2 경유 주간 예측 (#28 합의 대상)
+## 적용 범위와 구현 상태
 
-v2가 합의·구현되기 전까지 실제 코드는 아래 **v1(휘발유 다음날)** 을 따릅니다. 각 담당은 자기 v2 PR이 main에 들어갈 때 v1 항목을 지웁니다.
-근거: [`docs/evidence/06`](evidence/06_데이터분석_결과.md) §11~13, [`09`](evidence/09_싱가포르경유_0.05접합_근거.md). LSTM이 정상기(2016·19·22·25)와 2026 모두 1~4주차에서 naive보다 RMSE가 낮고, 정상기 1~4주·2026 2~4주는 Diebold-Mariano 검정으로 유의(p<0.05)합니다.
+공통 계약 ID는 **`diesel-weekly-v2`**입니다. 다음날 휘발유 v1 계약을 대체합니다.
+수치·컬럼·모델 주소는 [`data/contracts.py`](../data/contracts.py), API·AIOps 결과 타입은
+[`serving_app/schemas.py`](../serving_app/schemas.py)가 기준입니다. 데이터 생성·업로드·학습은
+같은 `validate_daily_rows()`를 사용합니다. 변경 시 이 문서·요청 예시·계약 테스트를 함께 수정합니다.
 
-| 항목 | v1 (현재) | v2 (변경) | 담당 |
+현재 입력 검증·주간 예측·배치 정답 연결·pyfunc 로더·승격 버전 확인은 구현됐습니다.
+**드리프트 계산·자동 재학습 트리거·운영자 알림은 아직 담당자 구현 대상**입니다.
+실모델이 없으면 예측은 503, AIOps TODO에 도달한 배치는 501을 반환합니다.
+이 계약 정의가 전체 AIOps 데모 완료를 의미하지는 않습니다.
+
+## 데이터와 모델 경계
+
+| 항목 | 확정 계약 |
+|---|---|
+| 예측 대상 | 다음 1·2·3·4주 전국 평균 자동차용경유 가격의 주간 평균, 원/L |
+| CSV 컬럼 순서 | `date,diesel_price,singapore_diesel_price,usd_krw,tax_or_supply_feature` |
+| `date` | `YYYY-MM-DD`, 오래된 날부터 하루 간격. 중복·누락·역순 금지 |
+| `diesel_price` | 자동차용경유 원/L, 양수·유한값. 보통휘발유를 이름만 바꿔 사용하지 않음 |
+| `singapore_diesel_price` | 싱가포르 경유 0.001% USD/bbl, D-1까지 관측한 최근 값. 두바이유와 다른 상품 |
+| `usd_krw` | KRW/USD, D일까지 고시된 최근 값, 양수·유한값 |
+| `tax_or_supply_feature` | 경유 기본 탄력세율 375원 대비 인하율 %, 유한값. 공급 차질은 시나리오로 구분 |
+| API 입력 | 날짜 포함 최근 **120일**, 정확히 120행. 입력 기준일 D = 마지막 행 날짜 |
+| 모델 내부 입력 | 마지막 **28일 × 8피처**. 90일 피처 계산에 필요한 문맥을 포함해 120행을 전달 |
+| 모델 출력 | 1주차부터 원/L 숫자 **정확히 4개**, 양수·유한값. 날짜 계산은 서빙 담당 |
+| k주 구간 | D+7(k−1)+1 ~ D+7k, 양끝 포함 7일 |
+| naive | D일 `diesel_price`를 1~4주 모두에 사용 |
+| 배치·업로드 최소 행 | **175행** = 입력 120 + 기준일 짝 28 − 1 + 4주 정답 28 |
+| 재학습 최소 행 | 저장된 전체 데이터에서 최근 **627행**. 175행 업로드만으로는 부족 |
+
+CSV의 추가 열은 공통 피처에서 제외합니다. API의 추가 JSON 필드는 모든 중첩 객체에서 거부합니다.
+숫자는 NaN·Infinity를 허용하지 않습니다. JSON 날짜에 epoch 숫자·시간 포함 문자열·`YYYYMMDD`는 허용하지 않습니다.
+최소 행 수는 작업마다 다릅니다. 직접 `/predict`에 보내는 120행은 업로드 175행 제한과 별개입니다.
+
+실측 선택본은 2008-04-15부터의 확장본입니다. 2012-12-03 이전 국제가격은 경유 0.05%에
+첫 60개 겹침 거래일 평균 스프레드 1.479667 USD/bbl를 더한 추정값이며, 접합 여부·관측일은
+별도 provenance CSV로 전달합니다. 휴장일은 이전 관측값으로 채우고 미래 값으로 보간하지 않습니다.
+출처·관측 시차·원본 검증·재생성은 [`data/README.md`](../data/README.md)를 따릅니다.
+
+정책표는 `data/reference/diesel_fuel_tax_cut.csv`, `diesel_tax_announced.csv`, `price_cap.csv`입니다.
+모델은 실행 위치의 정책표를 읽으며, 미래 정책은 예측 기준일까지 발표된 변경만 사용합니다.
+정책표 변경은 동일 모델의 예측에도 영향을 주므로 적용한 정책표 버전과 실행 결과를 함께 기록합니다.
+
+## HTTP API
+
+| Method | URL | 요청 / 응답 | 오류 |
 |---|---|---|---|
-| 예측 대상 | 다음날 휘발유 가격 | **다음 1·2·3·4주 경유 평균가**(원/L) 4개를 한 번에 출력. k주 = D+7(k−1)+1 ~ D+7k일, D = 마지막 입력일 | 전원 |
-| CSV 컬럼 | `date,gasoline_price,crude_oil_price,usd_krw,tax_or_supply_feature` | `date,diesel_price,singapore_diesel_price,usd_krw,tax_or_supply_feature` | 유나 |
-| 국제가격 | 두바이유, D-1 | 싱가포르 경유 0.001%(USD/bbl), D-1. 2012-12-02 이전은 0.05% + 1.479667 USD/bbl 접합 | 유나 |
-| 기간 | 2023-09 ~ | **2008-04-15 ~** | 유나 |
-| 정책표 | 없음 | `data/reference/diesel_fuel_tax_cut.csv`(유류세), `data/reference/price_cap.csv`(최고가격: 시행일·종료일·상한·발표일). 모델이 예측 때 읽음. 정책이 발표되면 표만 갱신, 재학습 불필요 | 유나(세금), 소영(상한) |
-| API 입력 | `sequence` 20개, 날짜 없음 | **최근 120일**, 행마다 `date` 포함(오래된 날 → 최근 날). 정책표 조회에 날짜 필요 | 준형 |
-| API 출력 | `predicted_price` | `predictions`: `[{horizon_week, start_date, end_date, predicted_avg_price}] × 4`, `base_date`, `model_version`. 모델은 숫자 4개만 내고, 날짜는 서빙이 계산: k주 = `base_date`+7(k−1)+1 ~ `base_date`+7k, `base_date` = 마지막 입력일 | 준형 |
-| 모델 | `GasolinePricePredictor`(Keras) | `DieselPricePredictor`, MLflow pyfunc 1개(LSTM + scaler + 정책 규칙). **`predict(df)`**: 입력 DataFrame 1건 = 최근 120행(`date` + 피처 4개, 오래된 날 → 최근 날), 출력 = 1~4주 평균가 float 4개(원/L, 1주차부터) | 소영 → 준형 |
-| 모델 주소 | `models:/GasolinePricePredictor/Production` | 승격 시 stage `Production`과 alias `champion`을 같은 버전에 같이 붙임 → `models:/DieselPricePredictor/Production` = `models:/DieselPricePredictor@champion`. `MODEL_SOURCE=local`은 `mlflow.pyfunc.load_model("serving_app/models/diesel_pyfunc")`로 같은 방식으로 읽음 | 소영·준형 |
-| naive | 직전 날 가격 | 마지막 입력일 가격을 1~4주 모두에 사용 | 소영 |
-| 배포 게이트 | `RMSE ≤ 10 AND RMSE < naive` | **1주차 `RMSE ≤ 50` AND 1~4주 모두 `RMSE < naive_rmse` AND 1~4주 평균 `RMSE ≤ Production 1~4주 평균 RMSE`**(Production이 있을 때, 같은 검증 구간). 비유한 값 거부 | 소영·동찬 |
-| 드리프트 (제안) | 최근 21건 RMSE > 10 | 정답이 확보된 최근 28일의 **1주차 RMSE > 같은 기간 naive RMSE**(1주차 정답은 7일 뒤 확보) | 동찬 |
-| fine-tuning | 최근 30일, 80:20 분할 | **저장된 전체 데이터의 최근 627행**으로 호출(업로드분만으로는 부족할 수 있음). 최근 365일 학습(Production warm start, scaler 재fit 금지), 학습에 쓰지 않은 최근 90일 검증, 게이트 동일. 반환 `{promoted, rmse, naive_rmse, version?, status}`, `status` = `promoted`·`gate_failed`·`no_production`, 627행 미만은 `ValueError("insufficient_data")` | 소영 → 동찬 |
-| 배치·업로드 최소 행 | 41행, `rows[i:i+20]` | **175행**(입력 120 + 짝 28건 − 1 + 4주 정답 28), `rows[i:i+120]` 예측 → 다음 1~4주 실제 평균과 비교, 최근 28건으로 드리프트 판정. AIOps에 넘기는 짝(제안): `{date, predicted[4], actual[4], naive}`, naive = 마지막 입력일 가격 | 준형·동찬 |
+| GET | `/health` | `status`, `contract_version`, `model_loaded`, `model_version`, `model_source`, `loading_mode` | liveness이며 lazy 첫 추론 전 `model_loaded=false`는 정상 |
+| POST | `/data/upload` | UTF-8/BOM CSV 최소 175행 → `filename`, `rows` | 인코딩·컬럼·행 수·데이터 검증 실패 400 |
+| GET | `/data/status` | `exists`, 파일명·기간·행 수·가격 범위 | 데이터가 없으면 `exists:false` |
+| POST | `/predict` | `PredictRequest` → `PredictResponse` | 입력 422, 모델 미준비/모델 출력 계약 위반 503 |
+| POST | `/predict/batch-test` | `BatchTestRequest` → `BatchTestResponse` | 입력 422, 모델 미준비/결과 계약 위반 503, AIOps 미구현 501 |
+| GET | `/logs` | 로그 파일 목록 | 기존 조회 API |
+| GET | `/logs/{filename}` | `name`, `content` | 없는 파일 404, 경로 조작 400 |
 
-게이트 수치 근거
-- 50원: 화물 안전운임제는 3개월 평균 경유가가 ±50원 이상 변하면 운임을 다시 고시합니다. 운송업계가 결정을 바꾸는 단위이므로 1주 예측 오차의 업무 허용 한도로 씁니다. 10원은 다음날 휘발유(naive 3~8원) 기준이라 주간 예측에 맞지 않습니다(2026 검증 구간 1주차 naive 34.6원).
-- naive 비교: 유가 예측 연구의 표준 평가(무변화 예측 대비 오차 비율 < 1).
-- Production 비교: 새 모델이 현재 서비스 모델보다 나쁠 때 교체하지 않습니다.
+`PredictRequest`는 `{sequence: DailyPoint[120]}`입니다. 실행 가능한 합성 요청은
+[`examples/predict.json`](../examples/predict.json), 정상 응답 예시는
+[`examples/predict-response.json`](../examples/predict-response.json)입니다.
 
-## v1 휘발유 다음날 예측 (현재 코드)
+```json
+{
+  "base_date": "2026-04-30",
+  "model_version": "champion:3",
+  "predictions": [
+    {"horizon_week": 1, "start_date": "2026-05-01", "end_date": "2026-05-07", "predicted_avg_price": 1601.0},
+    {"horizon_week": 2, "start_date": "2026-05-08", "end_date": "2026-05-14", "predicted_avg_price": 1602.0},
+    {"horizon_week": 3, "start_date": "2026-05-15", "end_date": "2026-05-21", "predicted_avg_price": 1603.0},
+    {"horizon_week": 4, "start_date": "2026-05-22", "end_date": "2026-05-28", "predicted_avg_price": 1604.0}
+  ]
+}
+```
 
-### 데이터
+`BatchTestRequest`는 `{rows: DailyPoint[175 이상]}`입니다. 실행 가능한 합성 요청은
+[`examples/batch-test.json`](../examples/batch-test.json)입니다.
+배치는 `rows[i:i+120]`으로 예측하고, 입력 마지막 날 다음날부터 7일씩 평균 내어 정답 4개를 붙입니다.
+N행으로 `N−120−28+1`개 짝을 만듭니다. 175행이면 기준일이 연속인 28개 짝이 됩니다.
+`predictions`는 모든 짝, AIOps 입력은 최근 28개 짝입니다. 다음 구조의 `BatchPair`를 전달합니다.
 
-정규화 CSV와 입력 피처 순서는 다음과 같습니다. 오피넷 원본 파일은 데이터 담당자가 이 형식으로 변환합니다.
+```json
+{"date": "2026-04-30", "predicted": [1620, 1621, 1622, 1623], "actual": [1623, 1630, 1637, 1644], "naive": 1619}
+```
 
-| 컬럼 | 의미 | 검증 |
+배치 응답은 `{predictions: BatchPair[], drift_check: DriftCheck}`입니다.
+`predicted`·`actual`은 각각 정확히 4개이며 같은 주차 순서입니다.
+`date`는 정답 도착일이 아니라 **입력 기준일**입니다. 배치 시뮬레이션은 이미 존재하는 정답을
+사용합니다. 실운영에서는 1주 정답은 7일 뒤, 전체 4주 정답은 28일 뒤에만 확보할 수 있습니다.
+중복 기준일을 실운영 기록으로 재집계하지 않는 정책은 AIOps 담당이 구현합니다.
+
+## MLflow·게이트·재학습
+
+등록 모델은 `DieselPricePredictor`, 서빙 alias는 `champion`입니다.
+승격 시 `Production` stage와 `champion` alias를 같은 버전으로 맞춥니다.
+서빙은 alias가 가리키는 버전을 확인하고 `models:/DieselPricePredictor/<version>`으로 고정해
+`mlflow.pyfunc.load_model()`로 읽습니다. 응답 버전은 `champion:<version>`입니다.
+로컬은 `serving_app/models/diesel_pyfunc`를 같은 로더로 읽고 응답 버전은 `local`입니다.
+scaler는 모델 아티팩트에 포함하며 별도 v1 `scaler.pkl`을 새 모델에 적용하지 않습니다.
+
+배포 게이트는 다음 조건을 모두 만족해야 합니다.
+
+1. 1주차 RMSE ≤ 50원/L.
+2. 1~4주 **각각** RMSE < 같은 기간 naive RMSE.
+3. Production이 있으면 같은 검증 구간에서 1~4주 평균 RMSE ≤ Production의 평균 RMSE.
+
+모델·naive·Production RMSE는 각각 정확히 4개, 유한·비음수입니다. `production_rmse=None`만
+Production 없는 상태이며 빈 배열은 거부합니다. 실패 시 새 모델을 승격하지 않고 기존 버전을 유지합니다.
+50원 기준의 업무 근거와 모델 평가 연구는 [`docs/evidence/06`](evidence/06_데이터분석_결과.md),
+[`09`](evidence/09_싱가포르경유_0.05접합_근거.md)를 참고합니다.
+
+`diesel_registry.fine_tune(rows)`는 공통 검증을 통과한 하루 간격 데이터 최소 627행을 받습니다.
+Production 가중치로 warm start하고 scaler는 재fit하지 않습니다. 최근 365개 학습 기준일,
+학습 타깃과 검증 기준일 사이 28일 간격, 최근 90개 검증 기준일과 마지막 검증의 28일 정답을 확보합니다.
+행 부족은 `ValueError("insufficient_data: ...")`입니다.
+
+`FineTuneResult`는 `status`, `promoted`, `rmse[4]`, `naive_rmse[4]`, `production_rmse[4] 또는 null`,
+`production_before`, `passed`, `reasons`, `run_id`, `version`을 정의합니다.
+선택 메타데이터는 null일 수 있습니다. 승격 시 `version`은 레지스트리 번호 문자열이며 필수입니다.
+
+| 재학습 status | promoted | 의미 |
 |---|---|---|
-| `date` | 기준일, ISO 날짜 | 하루 간격 오름차순, 중복·누락 불가 |
-| `diesel_price` | 전국 평균 보통휘발유 가격, 원/L | 양수 |
-| `singapore_diesel_price` | 두바이유 현물(오피넷), USD/barrel; D-1일까지 공개된 최근 거래일 값 | 양수 |
-| `usd_krw` | 원/미국달러 매매기준율(ECOS 731Y001), KRW/USD; D일까지 고시된 값 | 양수 |
-| `tax_or_supply_feature` | 휘발유 유류세 인하율 %, D일 시행값 (공급 차질은 피처 제외) | 유한 실수 |
+| `promoted` | true | 게이트 통과·Registry 승격. rmse/naive_rmse 4개와 version 필수 |
+| `gate_failed` | false | 학습·검증 완료, 게이트 실패. rmse/naive_rmse 4개, 기존 모델 유지 |
+| `no_production` | false | warm start할 Production 없음. rmse/naive_rmse는 null |
 
-출처·시차·결측 처리 상세는 [`data/README.md`](../data/README.md)를 따릅니다.
+## AIOps 상태와 서빙 교체
 
-합성 예제의 정책 피처 0은 실제 관측값이 아닙니다. 추가 지표의 출처·라이선스·발표 시각과
-휴일 결측 처리 정책을 확정하기 전에는 실측 성능을 주장하지 않습니다. 미래 값으로 보간하지 않습니다.
-API sequence는 가장 오래된 날부터 최근 날까지 20개이며 날짜는 생략합니다.
-학습·추론 모두 `FEATURE_COLUMNS` 순서로 `(N,20,4)`를 구성하고 마지막 입력 다음날 가격을 예측합니다.
-CSV 업로드 최소 41행은 시뮬레이션 21건 확보 기준이며 충분한 학습량을 의미하지 않습니다.
+드리프트 계약은 **정답이 확보된 최근 28개 기준일의 1주차 RMSE > 같은 기간 naive RMSE**입니다.
+28개 미만은 정상으로 간주하지 않고 `insufficient_data`입니다. 탐지 임계치는 배포 게이트 50원과 별개입니다.
+`drift_rmse`, `drift_naive_rmse`는 기존 서빙 모델의 탐지 지표입니다.
+`rmse[4]`, `naive_rmse[4]`는 재학습 후 독립 검증 지표이므로 화면·로그에서도 구분합니다.
 
-### API
+`DriftCheck.status`는 아래 6개만 사용합니다. 과거 `retrain_triggered`는 더 이상 사용하지 않습니다.
+AIOps 담당은 `fine_tune()` 결과를 이 상태로 전달하고, 원인을 `reasons`에 기록합니다.
 
-| Method | URL | 요청 / 응답 | 뼈대 상태 |
-|---|---|---|---|
-| GET | `/` | 원본 기반 대시보드 | 동작 |
-| GET | `/health` | `status`, `model_loaded`, `model_version`, `model_source`, `loading_mode` | `status`는 프로세스 생존; readiness는 `model_loaded` (lazy는 첫 예측 전 false) |
-| POST | `/data/upload` | multipart CSV → `filename`, `rows` | 검증·저장, 오류 400 |
-| GET | `/data/status` | 데이터 기간·행 수·`min_price`·`max_price` | 데이터 없으면 `exists:false` |
-| POST | `/predict` | `sequence` → `predicted_price`, `model_version` | 모델 필요, 입력 422, 미준비 503 |
-| POST | `/predict/batch-test` | `rows` 21개 이상 → `predictions`, `drift_check` | TODO, 현재 501 |
-| GET | `/logs` | 로그 목록 | 원본 재사용 |
-| GET | `/logs/{filename}` | `name`, `content` | 원본 재사용, 없는 파일 404 |
+| status | 의미 |
+|---|---|
+| `ok` | 충분한 정답으로 판정했으며 드리프트 없음 |
+| `insufficient_data` | 판정 짝 부족 또는 재학습 데이터 627행 미만 |
+| `promoted` | 재학습 게이트 통과·Registry 승격. 서빙 교체 결과는 별도 `reload` |
+| `gate_failed` | 재학습 게이트 실패·기존 모델 유지 |
+| `no_production` | Production이 없어 재학습 불가 |
+| `retrain_failed` | 재학습 실행 실패. 실패 이유 기록·기존 모델 유지 |
 
-전체 예측 요청 예시는 [`examples/predict.json`](../examples/predict.json).
-배치의 `rows`는 DailyPoint 전체 피처를 포함합니다. 원본 `prices` 전용 계약은 사용하지 않습니다.
-배치에서 `rows[i:i+20]`으로 예측하고 `rows[i+20].diesel_price`를 실제값으로 사용합니다.
-응답 `model_version`은 로컬 `v1-local`; MLflow 구현 후 `production:<실제 등록 버전>`으로 식별합니다.
+`reload={reloaded, version, error?}`는 승격 뒤 서빙 담당이 추가합니다.
+**`promoted=true`와 실제 새 모델 서빙은 다른 단계**입니다. `MODEL_SOURCE=mlflow`에서 승격 번호와
+실제 로드한 번호가 같아야 `reloaded=true`, 응답 버전은 `champion:<승격 번호>`가 됩니다.
+이때만 이전 모델의 예측 기록을 비웁니다. local 모드·버전 누락·불일치·로드 실패는 교체 실패이며
+현재 모델과 기록을 유지하고 `error`를 남깁니다. 클라이언트는 모르는 상태를 정상으로 표시하지 않습니다.
 
-### 모델·운영
+감지 → `[WARN]` → 재학습 시작 `[INFO]` → 승격 여부 → 실제 교체 결과를 `logs/aiops.log`에 기록합니다.
+운영자 알림 채널·수신자, 중복 트리거 억제, 재학습 실패 복구는 AIOps 담당의 구현·검증 항목입니다.
+최종 통합 증빙은 가짜 reload 화면과 구분하여 실제 `/predict` 새 버전 응답으로 확인합니다.
 
-- 배포 게이트: 원/L 기준 `RMSE <= 10 AND RMSE < naive_rmse`. 두 지표는 같은 시간순 검증 타깃으로 계산하며 비유한 값은 거부합니다.
-- naive는 직전 날 가격. scaler는 baseline 학습 구간에만 fit, 이후 transform만 합니다.
-- `fine_tune(rows)`는 Production 가중치에서 warm start하고 `{promoted, rmse, naive_rmse, version?}`를 반환합니다.
-- 원본 MLflow `Production` stage와 URI를 유지했습니다. alias 전환은 모델·서빙 담당이 함께 변경합니다.
-- 재학습 정책 목표: 최근 30일 학습 대상 + 선행 20일 입력 문맥. **이 50행 전체를 학습과 성능 검증에 중복 사용하지 않습니다.** 독립 시간순 검증 구간/최소 표본 수를 모델 담당자가 추가하고 확정합니다. 현재 원본 `_prepare`의 80:20 분할은 최종 정책이 아닙니다.
-- 드리프트 초기값: 정답이 확보된 최근 21건의 RMSE > 10원/L. 검증을 거쳐 조정할 초기 가설입니다.
-- 실제 다음날 가격이 도착하기 전에는 RMSE를 계산할 수 없습니다. 배치 시뮬레이션과 실운영 실제값 연결을 구분합니다.
-- 데이터 부족은 `insufficient_data`, 정상은 `ok`; 재학습은 실행 상태와 `promoted`를 별도 표시하도록 구현합니다.
-- 감지 → `[WARN]` → `[INFO] retrain triggered` → 게이트 재검증 → 성공 시 `[OK]`와 실제 버전. 실패 시 기존 Production 유지.
-- 중복 트리거 방지, 실패 로그, 성공 후 모델 캐시 교체와 예측 윈도우 초기화는 AIOps·서빙 공동 완료 항목입니다.
-- 알림은 `logs/aiops.log [WARN]` + 운영자 알림이 필수입니다. 운영자 알림 채널(예: 웹훅/메일)과 수신 대상은 AIOps 담당이 확정하고 설정 가능한 어댑터로 구현합니다. 전송 실패 로그와 중복 억제를 검증합니다. 현재 운영자 전송은 미구현입니다.
+## 담당별 인계와 검증
+
+| 담당 | 공통 입력/출력과 완료 증빙 |
+|---|---|
+| 데이터 | 경유 5컬럼·원본/가공 SHA-256·provenance·120일 입력+28일 정답 정렬·팀 전달 위치 |
+| 모델 | pyfunc 입력 120행/출력 4개·scaler 포함·주차별 RMSE/naive/Production·627행 재학습 결과 |
+| 서빙 | 422 입력 검증·175행 배치·503 미준비·승격 버전 확인·실패 시 캐시/기록 유지 |
+| AIOps | 28개 기준일 판정·6개 상태·627행 재학습 연결·알림/로그·중복 억제 |
+| UI·PM | 주차별 결과·탐지/재학습 RMSE 구분·모든 실패 상태·실제 버전 전환·Docker 실행 증빙 |
+
+`make lint test`는 공통 상수·CSV/API 날짜/수치·4주 출력·상태 모순·실패 시 기록 유지와 예시 파일을
+검증합니다. TensorFlow/MLflow 실모델 학습·Docker·운영자 알림 증빙은 별도 통합 실행으로 확보합니다.
 
 ## Docker 실행·영속화
 
@@ -98,7 +183,6 @@ CSV 업로드 최소 41행은 시뮬레이션 21건 확보 기준이며 충분�
 - 이미지에는 데이터·모델을 넣지 않습니다(`data/processed`는 `.dockerignore` 제외). v2 모델은 실제 경유 CSV가 필요하며 `data/sample_diesel_prices.csv`(120행)로는 학습할 수 없습니다.
 - 호스트의 `mlflow.db`·`mlruns`는 공유하지 않습니다. 아티팩트 경로가 호스트 절대경로로 기록되어 컨테이너에서 찾을 수 없으므로 컨테이너 안에서 학습·등록합니다.
 - 모델이 없으면 서버는 뜨고 `/predict`만 503입니다(기본 lazy). eager는 시작 시 로드 실패가 바로 드러나지만, 모델이 준비된 뒤 전환합니다.
-- v2 pyfunc 서빙(120일 입력·1~4주 응답·`champion` 로드)은 #34 머지 후 동작합니다.
 
 ```bash
 dc() { docker compose -f serving_app/docker-compose.yml "$@"; }  # bash·zsh 공통

@@ -1,14 +1,20 @@
 import csv
 import io
+from datetime import date, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
-from data.features import FEATURE_COLUMNS, GasolineScaler, build_sequences, load_rows
+from data.diesel_features import INPUT_DAYS
+from data.features import GasolineScaler, build_sequences, load_rows
 from serving_app import model_loader
 from serving_app.main import app
+from serving_app.monitoring import retrain_trigger
 from serving_app.routers import data as data_router
+from serving_app.routers import predict as predict_router
+from serving_app.schemas import BATCH_MIN_ROWS
 
 SAMPLE = Path("data/sample_diesel_prices.csv")
 
@@ -21,9 +27,23 @@ def client(monkeypatch):
         yield client
 
 
-def payload(length=20):
-    rows = load_rows(str(SAMPLE))
-    return {"sequence": [{k: row[k] for k in FEATURE_COLUMNS} for row in rows[:length]]}
+def make_rows(n, start="2026-01-01"):
+    """하루 간격 경유 행. 가격이 하루 1원씩 올라 주간 평균을 손으로 확인하기 쉽다."""
+    first = date.fromisoformat(start)
+    return [
+        {
+            "date": (first + timedelta(days=i)).isoformat(),
+            "diesel_price": 1500.0 + i,
+            "singapore_diesel_price": 90.0,
+            "usd_krw": 1400.0,
+            "tax_or_supply_feature": 0.0,
+        }
+        for i in range(n)
+    ]
+
+
+def payload(length=INPUT_DAYS):
+    return {"sequence": make_rows(length)}
 
 
 def test_dashboard_health_and_docs(client):
@@ -35,7 +55,7 @@ def test_dashboard_health_and_docs(client):
     assert health["model_source"] == "local"
 
 
-@pytest.mark.parametrize("length", [19, 21])
+@pytest.mark.parametrize("length", [INPUT_DAYS - 1, INPUT_DAYS + 1])
 def test_invalid_sequence_length(client, length):
     assert client.post("/predict", json=payload(length)).status_code == 422
 
@@ -47,20 +67,47 @@ def test_invalid_price(client, value):
     assert client.post("/predict", json=body).status_code == 422
 
 
-def test_predict_contract_with_injected_model(client, monkeypatch):
-    class StubModel:
-        version = "test-only"
+@pytest.mark.parametrize("case", ["missing", "duplicate", "gap"])
+def test_invalid_dates_rejected(client, case):
+    body = payload()
+    seq = body["sequence"]
+    if case == "missing":
+        del seq[5]["date"]
+    elif case == "duplicate":
+        seq[5]["date"] = seq[4]["date"]
+    else:
+        seq[5]["date"] = seq[6]["date"]
+    assert client.post("/predict", json=body).status_code == 422
 
-        def predict_one(self, sequence):
-            assert len(sequence) == 20
-            assert set(sequence[0]) == set(FEATURE_COLUMNS)
-            return 1712.4
+
+def test_predict_returns_four_weeks_with_dates(client, monkeypatch):
+    class StubModel:
+        version = "champion:3"
+
+        def predict(self, rows):
+            assert len(rows) == INPUT_DAYS
+            assert rows[-1]["date"] == "2026-04-30"
+            return [1601.0, 1602.0, 1603.0, 1604.456]
 
     monkeypatch.setattr(model_loader, "_model_cache", StubModel())
     response = client.post("/predict", json=payload())
     assert response.status_code == 200
-    assert response.json() == {"predicted_price": 1712.4, "model_version": "test-only"}
-    assert client.get("/health").json()["model_version"] == "test-only"
+    body = response.json()
+    assert body["base_date"] == "2026-04-30"
+    assert body["model_version"] == "champion:3"
+    assert body["predictions"][0] == {
+        "horizon_week": 1,
+        "start_date": "2026-05-01",
+        "end_date": "2026-05-07",
+        "predicted_avg_price": 1601.0,
+    }
+    assert body["predictions"][3] == {
+        "horizon_week": 4,
+        "start_date": "2026-05-22",
+        "end_date": "2026-05-28",
+        "predicted_avg_price": 1604.46,
+    }
+    assert client.get("/health").json()["model_version"] == "champion:3"
 
 
 def test_missing_model_returns_503(client, monkeypatch):
@@ -71,32 +118,179 @@ def test_missing_model_returns_503(client, monkeypatch):
     assert client.post("/predict", json=payload()).status_code == 503
 
 
-def test_batch_reports_unimplemented(client):
-    response = client.post("/predict/batch-test", json={"rows": payload(21)["sequence"]})
-    assert response.status_code == 501
+class LastPriceModel:
+    """마지막 입력일 가격 + k를 k주 예측으로 돌려주는 가짜 모델 (짝 정렬을 확인하기 쉽게)."""
+
+    version = "champion:1"
+
+    def predict(self, rows):
+        assert len(rows) == INPUT_DAYS
+        return [rows[-1]["diesel_price"] + k for k in range(1, 5)]
+
+
+@pytest.fixture
+def batch(client, monkeypatch):
+    """가짜 모델·트리거·reload로 batch_test를 돌리는 환경. state로 결과를 조작한다."""
+    state = {"trigger": {"status": "ok"}, "reload": {"reloaded": True, "version": "champion:2"}}
+    calls = {"trigger": [], "reload": []}
+
+    def trigger(recent):
+        calls["trigger"].append(list(recent))
+        if state["trigger"] is NotImplementedError:
+            raise NotImplementedError("TODO")
+        return dict(state["trigger"])
+
+    def reload(expected_version):
+        calls["reload"].append(expected_version)
+        return dict(state["reload"])
+
+    monkeypatch.setattr(model_loader, "_model_cache", LastPriceModel())
+    monkeypatch.setattr(retrain_trigger, "check_and_trigger", trigger)
+    monkeypatch.setattr(model_loader, "reload_model", reload)
+    monkeypatch.setattr(predict_router, "recent_predictions", [])
+
+    def post(length=BATCH_MIN_ROWS):
+        return client.post("/predict/batch-test", json={"rows": make_rows(length)})
+
+    return SimpleNamespace(post=post, state=state, calls=calls)
+
+
+def test_batch_pairs_each_base_date_with_weekly_actuals(batch):
+    response = batch.post()
+
+    assert response.status_code == 200
+    pairs = response.json()["predictions"]
+    assert len(pairs) == 28
+    # 첫 기준일 = 120번째 행(가격 1619). k주 실제 = 기준일 뒤 7일 평균 → 1619 + 7(k−1) + 4
+    assert pairs[0] == {
+        "date": "2026-04-30",
+        "predicted": [1620.0, 1621.0, 1622.0, 1623.0],
+        "actual": [1623.0, 1630.0, 1637.0, 1644.0],
+        "naive": 1619.0,
+    }
+    assert pairs[-1]["date"] == "2026-05-27"
+    assert predict_router.recent_predictions == pairs
+    assert batch.calls["trigger"] == [pairs]
+
+
+def test_batch_rejects_too_few_rows(batch):
+    assert batch.post(BATCH_MIN_ROWS - 1).status_code == 422
+
+
+def test_batch_keeps_only_latest_window(batch):
+    batch.post(BATCH_MIN_ROWS + 5)
+    batch.post()
+
+    assert len(predict_router.recent_predictions) == 28
+
+
+def test_batch_promoted_reloads_promoted_version_and_clears_window(batch):
+    batch.state["trigger"] = {
+        "status": "promoted",
+        "promoted": True,
+        "version": "2",
+        "rmse": [1.0] * 4,
+        "naive_rmse": [2.0] * 4,
+    }
+
+    response = batch.post()
+
+    assert response.status_code == 200
+    assert response.json()["drift_check"]["reload"] == {"reloaded": True, "version": "champion:2"}
+    assert batch.calls["reload"] == ["2"]
+    assert predict_router.recent_predictions == []
+
+
+def test_batch_reload_failure_keeps_window(batch):
+    batch.state["trigger"] = {
+        "status": "promoted",
+        "promoted": True,
+        "version": "2",
+        "rmse": [1.0] * 4,
+        "naive_rmse": [2.0] * 4,
+    }
+    batch.state["reload"] = {"reloaded": False, "version": "champion:1", "error": "boom"}
+
+    response = batch.post()
+
+    assert response.json()["drift_check"]["reload"]["reloaded"] is False
+    assert len(predict_router.recent_predictions) == 28
+
+
+def test_batch_not_promoted_skips_reload(batch):
+    batch.state["trigger"] = {
+        "status": "gate_failed",
+        "promoted": False,
+        "rmse": [3.0] * 4,
+        "naive_rmse": [2.0] * 4,
+    }
+
+    response = batch.post()
+
+    assert "reload" not in response.json()["drift_check"]
+    assert batch.calls["reload"] == []
+    assert len(predict_router.recent_predictions) == 28
+
+
+def test_batch_unimplemented_trigger_returns_501(batch):
+    batch.state["trigger"] = NotImplementedError
+
+    assert batch.post().status_code == 501
+
+
+def test_batch_missing_model_returns_503(batch, monkeypatch):
+    def missing():
+        raise FileNotFoundError("test missing model")
+
+    monkeypatch.setattr(model_loader, "get_model", missing)
+    assert batch.post().status_code == 503
+
+
+def _csv(rows, fieldnames=None):
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames or list(rows[0]), extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
+    return output.getvalue()
 
 
 def test_csv_upload_and_status(client, monkeypatch, tmp_path):
     monkeypatch.setattr(data_router, "UPLOAD_DIR", str(tmp_path))
     monkeypatch.setattr(data_router, "latest_upload", lambda: str(next(tmp_path.glob("*.csv"))))
-    response = client.post("/data/upload", files={"file": ("sample.csv", SAMPLE.read_bytes())})
+    body = _csv(make_rows(BATCH_MIN_ROWS))
+    response = client.post("/data/upload", files={"file": ("rows.csv", body)})
     assert response.status_code == 200
-    assert response.json()["rows"] == 120
+    assert response.json()["rows"] == BATCH_MIN_ROWS
     status = client.get("/data/status").json()
-    assert status["rows"] == 120
+    assert status["rows"] == BATCH_MIN_ROWS
     assert status["min_price"] > 0
 
 
-def test_invalid_csv_is_not_saved(client, monkeypatch, tmp_path):
+def _bad_uploads():
+    rows = make_rows(BATCH_MIN_ROWS)
+    fields = list(rows[0])
+    negative = [dict(r) for r in rows]
+    negative[5]["diesel_price"] = -1
+    duplicate = [dict(r) for r in rows]
+    duplicate[3]["date"] = duplicate[2]["date"]
+    return {
+        "missing_column": _csv(rows, [f for f in fields if f != "diesel_price"]).encode(),
+        "too_few_rows": _csv(rows[:-1]).encode(),
+        "non_positive": _csv(negative).encode(),
+        "duplicate_date": _csv(duplicate).encode(),
+        "not_utf8": _csv(rows).encode("utf-16"),
+    }
+
+
+@pytest.mark.parametrize(
+    "case", ["missing_column", "too_few_rows", "non_positive", "duplicate_date", "not_utf8"]
+)
+def test_invalid_upload_rejected_with_400(client, monkeypatch, tmp_path, case):
     monkeypatch.setattr(data_router, "UPLOAD_DIR", str(tmp_path))
-    rows = list(csv.DictReader(io.StringIO(SAMPLE.read_text())))
-    rows[3]["date"] = rows[2]["date"]
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=rows[0].keys())
-    writer.writeheader()
-    writer.writerows(rows)
-    response = client.post("/data/upload", files={"file": ("bad.csv", output.getvalue())})
+    body = _bad_uploads()[case]
+    response = client.post("/data/upload", files={"file": ("bad.csv", body)})
     assert response.status_code == 400
+    assert response.json()["detail"]
     assert not list(tmp_path.iterdir())
 
 
@@ -116,37 +310,6 @@ def test_sequences_align_next_day_and_scaler_roundtrip(tmp_path):
 
 
 def test_local_loader_checks_missing_artifacts_before_import(monkeypatch, tmp_path):
-    monkeypatch.setattr(model_loader, "LOCAL_MODEL_PATH", str(tmp_path / "missing.keras"))
+    monkeypatch.setattr(model_loader, "LOCAL_PYFUNC_PATH", str(tmp_path / "missing"))
     with pytest.raises(FileNotFoundError):
         model_loader._load_from_local()
-
-
-def _csv(rows, fieldnames):
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
-    writer.writeheader()
-    writer.writerows(rows)
-    return output.getvalue()
-
-
-def _bad_uploads():
-    rows = list(csv.DictReader(io.StringIO(SAMPLE.read_text())))
-    fields = list(rows[0].keys())
-    negative = [dict(r) for r in rows]
-    negative[5]["diesel_price"] = "-1"
-    return {
-        "missing_column": _csv(rows, [f for f in fields if f != "diesel_price"]).encode(),
-        "too_few_rows": _csv(rows[:40], fields).encode(),
-        "non_positive": _csv(negative, fields).encode(),
-        "not_utf8": _csv(rows, fields).encode("utf-16"),
-    }
-
-
-@pytest.mark.parametrize("case", ["missing_column", "too_few_rows", "non_positive", "not_utf8"])
-def test_invalid_upload_rejected_with_400(client, monkeypatch, tmp_path, case):
-    monkeypatch.setattr(data_router, "UPLOAD_DIR", str(tmp_path))
-    body = _bad_uploads()[case]
-    response = client.post("/data/upload", files={"file": ("bad.csv", body)})
-    assert response.status_code == 400
-    assert response.json()["detail"]
-    assert not list(tmp_path.iterdir())

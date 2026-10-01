@@ -1,0 +1,1229 @@
+{
+  "rows": [
+    {
+      "date": "2026-01-01",
+      "diesel_price": 1500.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-02",
+      "diesel_price": 1501.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-03",
+      "diesel_price": 1502.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-04",
+      "diesel_price": 1503.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-05",
+      "diesel_price": 1504.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-06",
+      "diesel_price": 1505.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-07",
+      "diesel_price": 1506.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-08",
+      "diesel_price": 1507.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-09",
+      "diesel_price": 1508.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-10",
+      "diesel_price": 1509.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-11",
+      "diesel_price": 1510.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-12",
+      "diesel_price": 1511.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-13",
+      "diesel_price": 1512.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-14",
+      "diesel_price": 1513.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-15",
+      "diesel_price": 1514.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-16",
+      "diesel_price": 1515.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-17",
+      "diesel_price": 1516.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-18",
+      "diesel_price": 1517.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-19",
+      "diesel_price": 1518.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-20",
+      "diesel_price": 1519.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-21",
+      "diesel_price": 1520.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-22",
+      "diesel_price": 1521.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-23",
+      "diesel_price": 1522.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-24",
+      "diesel_price": 1523.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-25",
+      "diesel_price": 1524.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-26",
+      "diesel_price": 1525.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-27",
+      "diesel_price": 1526.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-28",
+      "diesel_price": 1527.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-29",
+      "diesel_price": 1528.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-30",
+      "diesel_price": 1529.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-01-31",
+      "diesel_price": 1530.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-01",
+      "diesel_price": 1531.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-02",
+      "diesel_price": 1532.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-03",
+      "diesel_price": 1533.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-04",
+      "diesel_price": 1534.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-05",
+      "diesel_price": 1535.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-06",
+      "diesel_price": 1536.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-07",
+      "diesel_price": 1537.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-08",
+      "diesel_price": 1538.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-09",
+      "diesel_price": 1539.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-10",
+      "diesel_price": 1540.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-11",
+      "diesel_price": 1541.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-12",
+      "diesel_price": 1542.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-13",
+      "diesel_price": 1543.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-14",
+      "diesel_price": 1544.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-15",
+      "diesel_price": 1545.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-16",
+      "diesel_price": 1546.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-17",
+      "diesel_price": 1547.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-18",
+      "diesel_price": 1548.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-19",
+      "diesel_price": 1549.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-20",
+      "diesel_price": 1550.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-21",
+      "diesel_price": 1551.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-22",
+      "diesel_price": 1552.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-23",
+      "diesel_price": 1553.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-24",
+      "diesel_price": 1554.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-25",
+      "diesel_price": 1555.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-26",
+      "diesel_price": 1556.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-27",
+      "diesel_price": 1557.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-02-28",
+      "diesel_price": 1558.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-01",
+      "diesel_price": 1559.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-02",
+      "diesel_price": 1560.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-03",
+      "diesel_price": 1561.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-04",
+      "diesel_price": 1562.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-05",
+      "diesel_price": 1563.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-06",
+      "diesel_price": 1564.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-07",
+      "diesel_price": 1565.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-08",
+      "diesel_price": 1566.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-09",
+      "diesel_price": 1567.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-10",
+      "diesel_price": 1568.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-11",
+      "diesel_price": 1569.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-12",
+      "diesel_price": 1570.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-13",
+      "diesel_price": 1571.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-14",
+      "diesel_price": 1572.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-15",
+      "diesel_price": 1573.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-16",
+      "diesel_price": 1574.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-17",
+      "diesel_price": 1575.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-18",
+      "diesel_price": 1576.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-19",
+      "diesel_price": 1577.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-20",
+      "diesel_price": 1578.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-21",
+      "diesel_price": 1579.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-22",
+      "diesel_price": 1580.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-23",
+      "diesel_price": 1581.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-24",
+      "diesel_price": 1582.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-25",
+      "diesel_price": 1583.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-26",
+      "diesel_price": 1584.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-27",
+      "diesel_price": 1585.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-28",
+      "diesel_price": 1586.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-29",
+      "diesel_price": 1587.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-30",
+      "diesel_price": 1588.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-03-31",
+      "diesel_price": 1589.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-01",
+      "diesel_price": 1590.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-02",
+      "diesel_price": 1591.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-03",
+      "diesel_price": 1592.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-04",
+      "diesel_price": 1593.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-05",
+      "diesel_price": 1594.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-06",
+      "diesel_price": 1595.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-07",
+      "diesel_price": 1596.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-08",
+      "diesel_price": 1597.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-09",
+      "diesel_price": 1598.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-10",
+      "diesel_price": 1599.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-11",
+      "diesel_price": 1600.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-12",
+      "diesel_price": 1601.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-13",
+      "diesel_price": 1602.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-14",
+      "diesel_price": 1603.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-15",
+      "diesel_price": 1604.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-16",
+      "diesel_price": 1605.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-17",
+      "diesel_price": 1606.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-18",
+      "diesel_price": 1607.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-19",
+      "diesel_price": 1608.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-20",
+      "diesel_price": 1609.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-21",
+      "diesel_price": 1610.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-22",
+      "diesel_price": 1611.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-23",
+      "diesel_price": 1612.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-24",
+      "diesel_price": 1613.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-25",
+      "diesel_price": 1614.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-26",
+      "diesel_price": 1615.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-27",
+      "diesel_price": 1616.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-28",
+      "diesel_price": 1617.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-29",
+      "diesel_price": 1618.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-04-30",
+      "diesel_price": 1619.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-01",
+      "diesel_price": 1620.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-02",
+      "diesel_price": 1621.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-03",
+      "diesel_price": 1622.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-04",
+      "diesel_price": 1623.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-05",
+      "diesel_price": 1624.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-06",
+      "diesel_price": 1625.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-07",
+      "diesel_price": 1626.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-08",
+      "diesel_price": 1627.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-09",
+      "diesel_price": 1628.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-10",
+      "diesel_price": 1629.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-11",
+      "diesel_price": 1630.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-12",
+      "diesel_price": 1631.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-13",
+      "diesel_price": 1632.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-14",
+      "diesel_price": 1633.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-15",
+      "diesel_price": 1634.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-16",
+      "diesel_price": 1635.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-17",
+      "diesel_price": 1636.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-18",
+      "diesel_price": 1637.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-19",
+      "diesel_price": 1638.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-20",
+      "diesel_price": 1639.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-21",
+      "diesel_price": 1640.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-22",
+      "diesel_price": 1641.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-23",
+      "diesel_price": 1642.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-24",
+      "diesel_price": 1643.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-25",
+      "diesel_price": 1644.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-26",
+      "diesel_price": 1645.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-27",
+      "diesel_price": 1646.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-28",
+      "diesel_price": 1647.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-29",
+      "diesel_price": 1648.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-30",
+      "diesel_price": 1649.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-05-31",
+      "diesel_price": 1650.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-01",
+      "diesel_price": 1651.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-02",
+      "diesel_price": 1652.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-03",
+      "diesel_price": 1653.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-04",
+      "diesel_price": 1654.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-05",
+      "diesel_price": 1655.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-06",
+      "diesel_price": 1656.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-07",
+      "diesel_price": 1657.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-08",
+      "diesel_price": 1658.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-09",
+      "diesel_price": 1659.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-10",
+      "diesel_price": 1660.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-11",
+      "diesel_price": 1661.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-12",
+      "diesel_price": 1662.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-13",
+      "diesel_price": 1663.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-14",
+      "diesel_price": 1664.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-15",
+      "diesel_price": 1665.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-16",
+      "diesel_price": 1666.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-17",
+      "diesel_price": 1667.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-18",
+      "diesel_price": 1668.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-19",
+      "diesel_price": 1669.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-20",
+      "diesel_price": 1670.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-21",
+      "diesel_price": 1671.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-22",
+      "diesel_price": 1672.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-23",
+      "diesel_price": 1673.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    },
+    {
+      "date": "2026-06-24",
+      "diesel_price": 1674.0,
+      "singapore_diesel_price": 90.0,
+      "usd_krw": 1400.0,
+      "tax_or_supply_feature": 0.0
+    }
+  ]
+}
