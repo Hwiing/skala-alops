@@ -2,8 +2,12 @@
 #10 경유 모델 MLflow 기록 → 배포 게이트 → 등록·Production 승격 (contracts.md v2).
 
 - 모델은 pyfunc 하나(DieselPricePredictor): seed별 LSTM + 학습 구간 scaler + 정책 규칙.
-  서빙: mlflow.pyfunc.load_model("models:/DieselPricePredictor/<버전>").predict(최근 120일 DataFrame)
-  → horizon_week, start_date, end_date, predicted_avg_price 4행. 정책표는 실행 위치의 data/reference/를 읽는다.
+  입력: DataFrame 1건 = 최근 120행(date + 경유 4컬럼, 오래된 날 → 최근 날)
+  출력: 1~4주 평균 경유가 float 4개(원/L, 1주차부터). k주 날짜 = base_date+7(k−1)+1 ~ base_date+7k (서빙이 계산)
+  주소: 승격 시 stage "Production"과 alias "champion"을 같이 붙인다
+        (models:/DieselPricePredictor/Production 또는 models:/DieselPricePredictor@champion, 같은 버전).
+  로컬: save_local_pyfunc()로 저장한 폴더를 mlflow.pyfunc.load_model(<폴더>)로 같은 방식으로 읽는다.
+  정책표는 실행 위치의 data/reference/를 읽는다.
 - 게이트(serving_app/diesel_gate.py): 1주차 RMSE ≤ 50 AND 1~4주 모두 < naive AND 1주차 ≤ Production.
   Production은 새 모델과 같은 검증 구간으로 다시 평가해 비교한다.
 - 미통과 시 등록하지 않는다. Production이 없으면 "서비스할 모델 없음", 있으면 "기존 버전 유지"로 구분해 기록.
@@ -41,20 +45,31 @@ from serving_app.diesel_model import DieselForecaster  # noqa: E402
 from serving_app.diesel_training import evaluate, fit, report, split_holdout  # noqa: E402
 
 MODEL_NAME = "DieselPricePredictor"
+ALIAS = "champion"  # stage(Production)와 같은 버전을 가리키는 새 방식 주소
 DEFAULT_CSV = "data/processed/diesel_features_2008_spliced.csv"
 
 
 class DieselPyfunc(mlflow.pyfunc.PythonModel):
-    """MLflow 래퍼. 입력 DataFrame(date + 경유 4컬럼, 최근 120일) → 1~4주 평균가 4행."""
+    """MLflow 래퍼. 입력 DataFrame(date + 경유 4컬럼, 최근 120행) → 1~4주 평균가 float 4개."""
 
     def load_context(self, context):
         self.forecaster = DieselForecaster.load(context.artifacts["model_dir"])
 
-    def predict(self, context, model_input: pd.DataFrame, params=None) -> pd.DataFrame:
+    def predict(self, context, model_input: pd.DataFrame, params=None) -> list[float]:
         frame = model_input.copy()
         frame["date"] = pd.to_datetime(frame["date"]).dt.strftime("%Y-%m-%d")
         rows = frame[["date", *DIESEL_COLUMNS]].to_dict("records")
-        return pd.DataFrame(self.forecaster.predict(rows))
+        return self.forecaster.predict(rows)
+
+
+def save_local_pyfunc(forecaster: DieselForecaster, path: str, meta: dict | None = None):
+    """MODEL_SOURCE=local용. MLflow 레지스트리 없이 같은 pyfunc 형식으로 폴더에 저장한다."""
+    import shutil
+
+    shutil.rmtree(path, ignore_errors=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        forecaster.save(tmp, meta)
+        mlflow.pyfunc.save_model(path, python_model=DieselPyfunc(), artifacts={"model_dir": tmp})
 
 
 def production_version(client: MlflowClient) -> str | None:
@@ -134,6 +149,7 @@ def log_and_gate(forecaster, frame, val_idx, meta: dict, run_name: str) -> dict:
             client.transition_model_version_stage(
                 MODEL_NAME, v.version, "Production", archive_existing_versions=True
             )
+            client.set_registered_model_alias(MODEL_NAME, ALIAS, v.version)
             result.update(promoted=True, version=v.version)
             print(
                 f"[GATE PASSED] {MODEL_NAME} v{v.version} → Production (이전: {before or '없음'})"

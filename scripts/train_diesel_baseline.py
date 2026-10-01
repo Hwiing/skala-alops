@@ -2,7 +2,8 @@
 #9 경유 LSTM baseline 학습 + naive 비교 (contracts.md v2). MLflow 없이 로컬 파일로 저장한다.
 학습·평가 규칙은 serving_app/diesel_training.py (시간순 holdout, 학습 구간 scaler, 최근 1년 가중).
 
-출력: 주차별 RMSE 비교표, serving_app/models/diesel/ (seed별 모델, scaler, meta.json)
+출력: 주차별 RMSE 비교표, serving_app/models/diesel/ (seed별 모델, scaler, meta.json),
+      serving_app/models/diesel_pyfunc/ (MODEL_SOURCE=local용 pyfunc, mlflow.pyfunc.load_model로 읽음)
 실행: python scripts/train_diesel_baseline.py [--csv data/processed/diesel_features_2008_spliced.csv]
 """
 
@@ -17,9 +18,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from data.diesel_features import DailyFrame, load_diesel_rows  # noqa: E402
 from serving_app.diesel_model import MODEL_DIR  # noqa: E402
+from serving_app.diesel_registry import save_local_pyfunc  # noqa: E402
 from serving_app.diesel_training import evaluate, fit, report, split_holdout  # noqa: E402
 
-DEFAULT_CSV = "data/processed/diesel_features_2008_spliced.csv"  # 데이터 담당 PR #32 산출물
+DEFAULT_CSV = "data/processed/diesel_features_2008_spliced.csv"
+PYFUNC_DIR = "serving_app/models/diesel_pyfunc"  # 데이터 담당 PR #32 산출물
 
 
 def main():
@@ -28,6 +31,7 @@ def main():
     ap.add_argument("--holdout-days", type=int, default=365)
     ap.add_argument("--seeds", default="42,7,2026")
     ap.add_argument("--out", default=MODEL_DIR)
+    ap.add_argument("--pyfunc-out", default=PYFUNC_DIR)
     ap.add_argument(
         "--synthetic", action="store_true", help="합성 데이터면 표시 (성능 증빙에 쓰지 않음)"
     )
@@ -52,7 +56,8 @@ def main():
         + ", ".join(f"{k + 1}주 {'예' if b else '아니오'}" for k, b in enumerate(beats))
     )
     forecaster.save(args.out, meta)
-    print(f"saved -> {args.out}")
+    save_local_pyfunc(forecaster, args.pyfunc_out, meta)
+    print(f"saved -> {args.out}, {args.pyfunc_out}")
 
 
 if __name__ == "__main__":
