@@ -12,6 +12,7 @@ from data.features import GasolineScaler, build_sequences, load_rows
 from serving_app import model_loader
 from serving_app.main import app
 from serving_app.monitoring import retrain_trigger
+from serving_app.monitoring.prediction_window import PredictionWindow
 from serving_app.routers import data as data_router
 from serving_app.routers import predict as predict_router
 from serving_app.schemas import BATCH_MIN_ROWS
@@ -147,12 +148,13 @@ def batch(client, monkeypatch):
     monkeypatch.setattr(model_loader, "_model_cache", LastPriceModel())
     monkeypatch.setattr(retrain_trigger, "check_and_trigger", trigger)
     monkeypatch.setattr(model_loader, "reload_model", reload)
-    monkeypatch.setattr(predict_router, "recent_predictions", [])
+    window = PredictionWindow()
+    monkeypatch.setattr(predict_router, "window", window)
 
     def post(length=BATCH_MIN_ROWS):
         return client.post("/predict/batch-test", json={"rows": make_rows(length)})
 
-    return SimpleNamespace(post=post, state=state, calls=calls)
+    return SimpleNamespace(post=post, state=state, calls=calls, window=window)
 
 
 def test_batch_pairs_each_base_date_with_weekly_actuals(batch):
@@ -169,19 +171,21 @@ def test_batch_pairs_each_base_date_with_weekly_actuals(batch):
         "naive": 1619.0,
     }
     assert pairs[-1]["date"] == "2026-05-27"
-    assert predict_router.recent_predictions == pairs
-    assert batch.calls["trigger"] == [pairs]
+    # 내부 기록에만 모델 버전·출처를 붙인다 (HTTP BatchPair는 추가 필드 금지)
+    recorded = [dict(p, model_version="champion:1", source="batch") for p in pairs]
+    assert batch.window.pairs() == recorded
+    assert batch.calls["trigger"] == [recorded]
 
 
 def test_batch_rejects_too_few_rows(batch):
     assert batch.post(BATCH_MIN_ROWS - 1).status_code == 422
 
 
-def test_batch_keeps_only_latest_window(batch):
-    batch.post(BATCH_MIN_ROWS + 5)
+def test_batch_resend_overwrites_same_base_dates(batch):
+    batch.post()
     batch.post()
 
-    assert len(predict_router.recent_predictions) == 28
+    assert len(batch.window) == 28
 
 
 def test_batch_promoted_reloads_promoted_version_and_clears_window(batch):
@@ -198,7 +202,7 @@ def test_batch_promoted_reloads_promoted_version_and_clears_window(batch):
     assert response.status_code == 200
     assert response.json()["drift_check"]["reload"] == {"reloaded": True, "version": "champion:2"}
     assert batch.calls["reload"] == ["2"]
-    assert predict_router.recent_predictions == []
+    assert len(batch.window) == 0
 
 
 def test_batch_reload_failure_keeps_window(batch):
@@ -214,7 +218,7 @@ def test_batch_reload_failure_keeps_window(batch):
     response = batch.post()
 
     assert response.json()["drift_check"]["reload"]["reloaded"] is False
-    assert len(predict_router.recent_predictions) == 28
+    assert len(batch.window) == 28
 
 
 def test_batch_not_promoted_skips_reload(batch):
@@ -229,7 +233,7 @@ def test_batch_not_promoted_skips_reload(batch):
 
     assert "reload" not in response.json()["drift_check"]
     assert batch.calls["reload"] == []
-    assert len(predict_router.recent_predictions) == 28
+    assert len(batch.window) == 28
 
 
 def test_batch_unimplemented_trigger_returns_501(batch):

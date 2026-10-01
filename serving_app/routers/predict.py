@@ -11,8 +11,8 @@ from pydantic import ValidationError
 from data.diesel_features import INPUT_DAYS, WINDOWS
 from serving_app import model_loader
 from serving_app.monitoring import retrain_trigger
+from serving_app.monitoring.prediction_window import window
 from serving_app.schemas import (
-    PAIR_WINDOW,
     BatchPair,
     BatchTestRequest,
     BatchTestResponse,
@@ -24,10 +24,6 @@ from serving_app.schemas import (
 )
 
 router = APIRouter()
-
-# 최근 예측 짝({date, predicted[4], actual[4], naive})을 PAIR_WINDOW(28)건만 유지한다.
-# ponytail: 전역 리스트·잠금 없음(단일 사용자 시연용), 동시 배치 요청이 생기면 잠금 추가.
-recent_predictions: list[dict] = []
 
 
 def _get_model_or_503():
@@ -98,12 +94,15 @@ def batch_test(req: BatchTestRequest):
     """
     model = _get_model_or_503()
     pairs = _pair_with_actual(model, [p.model_dump(mode="json") for p in req.rows])
-    recent_predictions.extend(pairs)
-    del recent_predictions[:-PAIR_WINDOW]
+    # 내부 기록에만 예측한 모델 버전을 붙인다. 판정은 최신 모델 버전의 짝만 쓴다(#15).
+    for p in pairs:
+        window.record(
+            p["date"], p["predicted"], p["naive"], model.version, actual=p["actual"], source="batch"
+        )
 
     try:
         drift_check = DriftCheck.model_validate(
-            retrain_trigger.check_and_trigger(recent_predictions)
+            retrain_trigger.check_and_trigger(window.pairs())
         ).model_dump(exclude_none=True)
     except NotImplementedError as exc:
         raise HTTPException(501, f"AIOps 판정 미구현: {exc}") from exc
@@ -117,6 +116,6 @@ def batch_test(req: BatchTestRequest):
         except ValidationError as exc:
             raise HTTPException(503, "모델 교체 결과가 공통 계약에 맞지 않습니다") from exc
         if drift_check["reload"]["reloaded"]:
-            recent_predictions.clear()
+            window.clear()
 
     return BatchTestResponse(predictions=pairs, drift_check=drift_check)
