@@ -113,7 +113,7 @@ PM과 모델·서빙·AIOps 담당이 공통 계약과 품질 게이트를 확�
 | 오피넷 원본 | 주유소 → 평균판매가격 → 제품별 → 일간 → **자동차용경유** 선택, CSV저장 |
 | 원본 형식 | CP949 또는 UTF-8, `구분,자동차용경유` (선택한 제품만 내려받으면 2열) |
 | 목표/단위 | `diesel_price`, 전국 평균 자동차용경유 가격, 원/L |
-| #31 후보 컬럼 순서 | `date,diesel_price,singapore_diesel_price,usd_krw,tax_or_supply_feature` |
+| 데이터 담당 전달 컬럼 순서 | `date,diesel_price,singapore_diesel_price,usd_krw,tax_or_supply_feature` |
 | 국제 가격 | 오피넷 국제유가 → 석유제품 → 일간 → **경유(0.001%)**, 단위 **`$`** 선택. USD/bbl, 휴장일 빈 값은 건너뜀 |
 | 실측 데이터 기간 | 2012-12-04 ~ 2026-09-30. 싱가포르 경유(0.001%) 첫 관측은 2012-12-03이며 D일에는 D-1일까지 공개된 값만 사용 |
 | 경유 유류세 피처 | 경유 기본 탄력세율 375원/L 대비 인하율(%), 소수 첫째 자리 |
@@ -194,9 +194,10 @@ ECOS 환율은 `data.ecos --start 20121115 --end 20260930 --out data/raw/ecos_us
 경유(0.001%)가 2012-12-01부터 조사되고 현지 시차로 T일 가격을 T+1일에 조사한다고 설명합니다.
 경유 세율의 과거 구간은 [국가법령정보센터 개정문](https://www.law.go.kr/LSW/lsRvsDocListP.do?chrClsCd=010202&lsId=002619&lsRvsGubun=all)에서 확인했습니다.
 
-`singapore_diesel_price`는 #31의 **데이터 담당 후보 컬럼명**입니다. 기존 공통 계약은 여전히
-`crude_oil_price`와 `gasoline_price`를 사용합니다. 컬럼명·기간·학습 타깃의 팀 합의 전에는
-이 CSV를 기존 서비스에 업로드하지 않습니다.
+`singapore_diesel_price`는 #31에서 **데이터 담당이 팀에 전달하는 컬럼명**으로 정했습니다.
+두바이유의 `crude_oil_price`와 다른 상품이므로 이름을 재사용하지 않습니다. 기존 공통 계약은
+여전히 `crude_oil_price`와 `gasoline_price`를 사용합니다. PM·모델·서빙·AIOps 담당이 이
+입력명을 공통 계약과 코드에 반영하기 전에는 이 CSV를 기존 서비스에 업로드하지 않습니다.
 
 ### 2008~2012년 접합 제안 검토 (#28)
 
