@@ -8,8 +8,9 @@
 같은 `validate_daily_rows()`를 사용합니다. 변경 시 이 문서·요청 예시·계약 테스트를 함께 수정합니다.
 
 현재 입력 검증·주간 예측·배치 정답 연결·pyfunc 로더·승격 버전 확인은 구현됐습니다.
-**드리프트 계산·자동 재학습 트리거·운영자 알림은 아직 담당자 구현 대상**입니다.
-실모델이 없으면 예측은 503, AIOps TODO에 도달한 배치는 501을 반환합니다.
+드리프트 판정·자동 재학습 트리거·운영자 알림도 `/predict/batch-test`에 연결됐습니다.
+**실시간 `/predict` 기록·지연 정답 적재, 업로드 데이터의 재학습 반영은 아직 없습니다.**
+실모델이 없으면 예측은 503입니다.
 이 계약 정의가 전체 AIOps 데모 완료를 의미하지는 않습니다.
 
 ## 데이터와 모델 경계
@@ -49,9 +50,9 @@ CSV의 추가 열은 공통 피처에서 제외합니다. API의 추가 JSON 필
 | Method | URL | 요청 / 응답 | 오류 |
 |---|---|---|---|
 | GET | `/health` | `status`, `contract_version`, `model_loaded`, `model_version`, `model_source`, `loading_mode` | liveness이며 lazy 첫 추론 전 `model_loaded=false`는 정상 |
-| POST | `/data/upload` | UTF-8/BOM CSV 최소 175행 → `filename`, `rows` | 인코딩·컬럼·행 수·데이터 검증 실패 400 |
+| POST | `/data/upload` | UTF-8/BOM CSV 최소 175행 → `filename`, `rows`, `filled`(실시간 예측에 채운 주차 정답 수), 채운 정답이 있으면 `drift_check` | 인코딩·컬럼·행 수·데이터 검증 실패 400, 판정은 batch-test와 같은 501/503 |
 | GET | `/data/status` | `exists`, 파일명·기간·행 수·가격 범위 | 데이터가 없으면 `exists:false` |
-| POST | `/predict` | `PredictRequest` → `PredictResponse` | 입력 422, 모델 미준비/모델 출력 계약 위반 503 |
+| POST | `/predict` | `PredictRequest` → `PredictResponse`. 성공 시 예측 기록에 정답 없이 남김(`source=live`) | 입력 422, 모델 미준비/모델 출력 계약 위반 503 |
 | POST | `/predict/batch-test` | `BatchTestRequest` → `BatchTestResponse` | 입력 422, 모델 미준비/결과 계약 위반 503, AIOps 미구현 501 |
 | GET | `/logs` | 로그 파일 목록 | 기존 조회 API |
 | GET | `/logs/{filename}` | `name`, `content` | 없는 파일 404, 경로 조작 400 |
@@ -117,6 +118,10 @@ Production 가중치로 warm start하고 scaler는 재fit하지 않습니다. �
 `FineTuneResult`는 `status`, `promoted`, `rmse[4]`, `naive_rmse[4]`, `production_rmse[4] 또는 null`,
 `production_before`, `passed`, `reasons`, `run_id`, `version`을 정의합니다.
 선택 메타데이터는 null일 수 있습니다. 승격 시 `version`은 레지스트리 번호 문자열이며 필수입니다.
+공통 스키마의 `RegistryVersion`은 MLflow가 반환하는 양의 정수 버전도 입력으로 받습니다.
+`production_before`와 `version`은 검증 시 문자열로 정규화하고 JSON 응답에는 항상 문자열로
+내보냅니다. 기존 문자열 입력과 null은 유지하며, bool·float·0·음수 정수는 거부합니다.
+서빙 버전(`local`, `champion:<version>`)과 `reload.version`은 기존 문자열 계약을 유지합니다.
 
 | 재학습 status | promoted | 의미 |
 |---|---|---|
@@ -130,6 +135,10 @@ Production 가중치로 warm start하고 scaler는 재fit하지 않습니다. �
 28개 미만은 정상으로 간주하지 않고 `insufficient_data`입니다. 탐지 임계치는 배포 게이트 50원과 별개입니다.
 `drift_rmse`, `drift_naive_rmse`는 기존 서빙 모델의 탐지 지표입니다.
 `rmse[4]`, `naive_rmse[4]`는 재학습 후 독립 검증 지표이므로 화면·로그에서도 구분합니다.
+
+판정은 두 경로에서 실행됩니다. `/predict/batch-test`는 과거 데이터라 정답과 함께 기록(`source=batch`)하고 바로 판정합니다.
+실시간 `/predict`는 정답 없이 기록(`source=live`)하고, 이후 `/data/upload`의 일별 가격이 k주 7일을 모두 덮으면
+그 주 평균을 정답으로 채운 뒤 판정합니다. 7일 중 하루라도 없으면 그 주는 비워 둡니다. 판정은 최신 모델 버전의 기록만 씁니다.
 
 `DriftCheck.status`는 아래 6개만 사용합니다. 과거 `retrain_triggered`는 더 이상 사용하지 않습니다.
 AIOps 담당은 `fine_tune()` 결과를 이 상태로 전달하고, 원인을 `reasons`에 기록합니다.
@@ -182,6 +191,11 @@ AIOps 담당은 `fine_tune()` 결과를 이 상태로 전달하고, 원인을 `r
 - `restart`·`down`·재빌드 후에도 유지되고, `down -v`로만 삭제됩니다. `restart: unless-stopped`.
 - 이미지에는 데이터·모델을 넣지 않습니다(`data/processed`는 `.dockerignore` 제외). v2 모델은 실제 경유 CSV가 필요하며 `data/sample_diesel_prices.csv`(120행)로는 학습할 수 없습니다.
 - 호스트의 `mlflow.db`·`mlruns`는 공유하지 않습니다. 아티팩트 경로가 호스트 절대경로로 기록되어 컨테이너에서 찾을 수 없으므로 컨테이너 안에서 학습·등록합니다.
+- AIOps 설정은 호스트 환경변수로 넘깁니다(예: `AIOPS_ALERT_WEBHOOK_URL=<url> MODEL_SOURCE=mlflow dc up -d`).
+  `AIOPS_ALERT_WEBHOOK_URL`(비우면 `aiops.log`의 `[ALERT]`만), `AIOPS_ALERT_TIMEOUT`(5초), `AIOPS_ALERT_DEDUP_SECONDS`(3600),
+  `RETRAIN_COOLDOWN_SECONDS`(600), `DIESEL_DATA_CSV`(재학습 데이터, 기본 `data/processed/diesel_features_2008_spliced.csv`).
+- 재학습 승격 후 자동 교체는 `MODEL_SOURCE=mlflow`에서만 됩니다. `local`은 레지스트리 버전을 서빙하지 않아 `reload`가 거절됩니다.
+- 재학습은 업로드 파일이 아니라 `DIESEL_DATA_CSV`의 마지막 627행을 읽습니다. 새 데이터를 반영하려면 그 파일을 갱신합니다(`dc cp`).
 - 모델이 없으면 서버는 뜨고 `/predict`만 503입니다(기본 lazy). eager는 시작 시 로드 실패가 바로 드러나지만, 모델이 준비된 뒤 전환합니다.
 
 ```bash

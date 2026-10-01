@@ -179,6 +179,38 @@ def test_finetune_accepts_weekly_metrics_and_no_production_without_metrics():
         FineTuneResult(status="gate_failed", promoted=False)
 
 
+@pytest.mark.parametrize("schema", [FineTuneResult, DriftCheck])
+@pytest.mark.parametrize("status", ["gate_failed", "promoted"])
+@pytest.mark.parametrize("number", [2, "2"])
+def test_registry_versions_normalize_mlflow_numbers_to_response_strings(schema, status, number):
+    result = schema(
+        status=status,
+        promoted=status == "promoted",
+        production_before=number,
+        version=number if status == "promoted" else None,
+        rmse=[1] * 4,
+        naive_rmse=[2] * 4,
+    )
+    payload = json.loads(result.model_dump_json())
+    assert payload["production_before"] == "2"
+    assert payload["version"] == ("2" if status == "promoted" else None)
+
+
+@pytest.mark.parametrize("field", ["production_before", "version"])
+@pytest.mark.parametrize("bad", [True, False, 2.0, 0, -1])
+def test_registry_version_rejects_non_integer_or_non_positive_numbers(field, bad):
+    payload = {
+        "status": "promoted",
+        "promoted": True,
+        "version": "2",
+        "rmse": [1] * 4,
+        "naive_rmse": [2] * 4,
+        field: bad,
+    }
+    with pytest.raises(ValidationError):
+        FineTuneResult.model_validate(payload)
+
+
 @pytest.mark.parametrize(
     "rmse,naive,production", [([1], [2], None), ([1] * 4, [2] * 4, []), ([-1] * 4, [2] * 4, None)]
 )

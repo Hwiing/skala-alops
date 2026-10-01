@@ -21,7 +21,7 @@ def write(tmp_path, rows, encoding="cp949"):
 @pytest.mark.parametrize("encoding", ["cp949", "utf-8-sig"])
 def test_converts_opinet_csv(tmp_path, encoding):
     rows = load_opinet_gasoline(write(tmp_path, ROWS, encoding))
-    assert rows[0] == {"date": "2026-09-26", "diesel_price": 1856.05}
+    assert rows[0] == {"date": "2026-09-26", "gasoline_price": 1856.05}
     assert [row["date"] for row in rows] == [
         "2026-09-26",
         "2026-09-27",
