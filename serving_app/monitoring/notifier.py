@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger("aiops")
 
-# 운영자가 알아야 하는 결과만 보낸다. ok·판정 보류·skipped_*는 알림 대상이 아니다.
+# 재학습을 실제로 시도한 결과만 보낸다. ok·판정 보류·쿨다운·진행 중은 알림 대상이 아니다.
 ALERT_STATUSES = {
     "promoted": "INFO",
     "gate_failed": "WARN",
