@@ -122,7 +122,7 @@
     </div>
   </div>
   <div class="nav-right">
-    <span class="pill neutral">MODEL_SOURCE=mlflow 기준</span>
+    <span class="pill neutral" id="model-badge">모델 상태 확인 중…</span>
   </div>
 </div>
 
@@ -216,6 +216,7 @@ const PIPELINE_STAGES = [
   { key: "train", title: "모델 학습", desc: "fine-tuning" },
   { key: "register", title: "모델 등록", desc: "MLflow Registry" },
   { key: "deploy", title: "배포", desc: "Production 승격" },
+  { key: "reload", title: "서빙 교체", desc: "reload_model" },
 ];
 
 /* ===================== 유틸 ===================== */
@@ -258,10 +259,28 @@ async function safeJson(res) {
   const text = await res.text();
   try { return JSON.parse(text); } catch (e) { return { __raw: text || "(응답 없음)" }; }
 }
+function esc(text) {
+  const div = document.createElement("div");
+  div.textContent = String(text);
+  return div.innerHTML;
+}
+function pill(level, text) {
+  return `<span class="pill ${level}"><span class="dot"></span>${esc(text)}</span>`;
+}
 function showResult(el, obj, isError = false) {
   el.classList.add("show");
   el.style.borderColor = isError ? "var(--err)" : "var(--border)";
   el.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+}
+
+/* ===================== 모델 상태 ===================== */
+async function loadHealth() {
+  const badge = document.getElementById("model-badge");
+  const { ok, data } = await getJSON("/health").catch(() => ({ ok: false }));
+  if (!ok || !data) { badge.className = "pill err"; badge.textContent = "서버 응답 없음"; return; }
+  const version = data.model_loaded ? data.model_version : "미로드";
+  badge.className = data.model_loaded ? "pill ok" : "pill neutral";
+  badge.textContent = `모델 ${version} · ${data.model_source} · ${data.loading_mode}`;
 }
 
 /* ===================== 데이터 업로드 ===================== */
@@ -325,19 +344,23 @@ function renderPipeline() {
   const serverStatus = driftCheck.status; // "ok" | "retrain_triggered"
   const promoted = driftCheck.promoted;
 
-  let states; // 7개 단계 상태: idle | ok | warn
+  const reload = driftCheck.reload; // promoted일 때만 서버가 채운다 (#14)
+
+  let states; // 8개 단계 상태: idle | ok | warn
   if (serverStatus === "retrain_triggered" && promoted === true) {
-    states = ["ok", "ok", "warn", "ok", "ok", "ok", "ok"];
+    states = ["ok", "ok", "warn", "ok", "ok", "ok", "ok", reload?.reloaded ? "ok" : "warn"];
   } else if (serverStatus === "retrain_triggered" && promoted === false) {
-    states = ["ok", "ok", "warn", "ok", "ok", "warn", "idle"];
+    states = ["ok", "ok", "warn", "ok", "ok", "warn", "idle", "idle"];
   } else if (serverStatus === "retrain_triggered") {
-    states = ["ok", "ok", "warn", "idle", "idle", "idle", "idle"];
+    states = ["ok", "ok", "warn", "idle", "idle", "idle", "idle", "idle"];
   } else {
-    states = ["ok", "ok", "ok", "idle", "idle", "idle", "idle"];
+    states = ["ok", "ok", "ok", "idle", "idle", "idle", "idle", "idle"];
   }
   const statusText = { ok: "완료", warn: "감지됨", idle: "대기 중" };
+  const labels = states.map((st) => statusText[st]);
+  if (reload) labels[7] = reload.reloaded ? reload.version : "교체 실패";
 
-  track.innerHTML = PIPELINE_STAGES.map((s, i) => stageHtml(s, i, states[i], statusText[states[i]])).join("");
+  track.innerHTML = PIPELINE_STAGES.map((s, i) => stageHtml(s, i, states[i], esc(labels[i]))).join("");
 }
 function stageHtml(stage, idx, state, statusLabel) {
   return `
@@ -362,10 +385,11 @@ async function sendBatch(kind) {
     const res = await fetch("/predict/batch-test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: prices.map(gasoline_price => ({gasoline_price, crude_oil_price: 75, usd_krw: 1350, tax_or_supply_feature: 0})) }) });
     const data = await safeJson(res);
     if (!res.ok) {
-      const reason = data.__raw
-        ? "서버 오류 - model_loader.py 또는 predict.py의 TODO가 아직 구현되지 않았을 수 있습니다"
-        : "오류 (TODO 미구현일 수 있음)";
-      statusEl.innerHTML = `<span class="pill err"><span class="dot"></span>${reason}</span>`;
+      // 501: AIOps 판정 미구현, 503: 모델 미준비 - 서버 detail을 그대로 보여준다.
+      const reason = data.detail
+        ? `${res.status} · ${data.detail}`
+        : `${res.status} · 서버 오류 - model_loader.py 또는 predict.py를 확인하세요`;
+      statusEl.innerHTML = pill(res.status === 501 ? "warn" : "err", reason);
       showResult(resultBox, { status: res.status, detail: data }, true);
       return;
     }
@@ -378,21 +402,26 @@ async function sendBatch(kind) {
     loadLogFiles();
 
     const check = data.drift_check || {};
+    const rmse = check.rmse?.toFixed?.(2) ?? check.rmse;
     let level = "ok", label = "정상 (드리프트 없음)";
-    if (check.status === "retrain_triggered" && check.promoted) {
-      level = "ok"; label = `재학습 완료 · 새 버전 승격 (rmse=${check.rmse?.toFixed?.(2) ?? check.rmse})`;
+    if (check.status === "retrain_triggered" && check.promoted && check.reload?.reloaded) {
+      level = "ok"; label = `재학습 완료 · ${check.reload.version}로 교체 (rmse=${rmse})`;
+    } else if (check.status === "retrain_triggered" && check.promoted) {
+      level = "warn"; label = `승격됐지만 서빙 교체 실패 · 기존 ${check.reload?.version ?? "모델"} 유지 (${check.reload?.error ?? "원인 미상"})`;
     } else if (check.status === "retrain_triggered" && check.promoted === false) {
-      level = "warn"; label = `드리프트 감지 · 재학습했지만 게이트 미통과 (rmse=${check.rmse?.toFixed?.(2) ?? check.rmse})`;
+      level = "warn"; label = `드리프트 감지 · 재학습했지만 게이트 미통과 (rmse=${rmse})`;
     } else if (check.status === "retrain_triggered") {
       level = "warn"; label = "드리프트 감지 · 재학습 트리거됨";
     }
     statusEl.innerHTML = `
-      <span class="pill ${level}"><span class="dot"></span>${label}</span>
+      ${pill(level, label)}
       <span class="pill neutral" style="margin-left:6px;">클라이언트 계산 RMSE (원/L): ${clientRmse != null ? clientRmse.toFixed(2) : "-"}</span>`;
     showResult(resultBox, data, false);
   } catch (e) {
     statusEl.innerHTML = `<span class="pill err"><span class="dot"></span>연결 실패</span>`;
     showResult(resultBox, "요청 실패: " + e.message, true);
+  } finally {
+    loadHealth(); // 실패해도 첫 요청에서 모델이 로드됐을 수 있다 (lazy)
   }
 }
 
@@ -400,6 +429,7 @@ async function sendBatch(kind) {
 async function init() {
   renderPipeline();
   loadLogFiles();
+  loadHealth();
 }
 init();
 </script>
