@@ -59,13 +59,10 @@ MODEL_SOURCE=mlflow LOADING_MODE=eager make run
 
 ```bash
 make docker
-# 원본의 빌드 시 학습 흐름은 선택적으로 보존되어 있습니다 (무거운 전체 학습).
-# 담당자 구현/검증 완료 후 사용:
-# docker build --build-arg TRAIN_ON_BUILD=1 -f serving_app/Dockerfile -t gasoline-serving .
 ```
 
-기본 이미지는 모델 없는 lazy/local 상태로 시작합니다(`/predict` 503).
-볼륨·컨테이너 안 학습·MLflow 전환은 [공통 계약 - Docker 실행·영속화](docs/contracts.md#docker-실행영속화)를 참고하세요.
+기본 이미지는 모델·데이터 없이 lazy/local 상태로 시작합니다(`/predict` 503).
+실제 경유 CSV 전달, 컨테이너 안 학습·등록, 볼륨, MLflow 전환은 [공통 계약 - Docker 실행·영속화](docs/contracts.md#docker-실행영속화)를 참고하세요.
 
 ## 구조와 역할
 

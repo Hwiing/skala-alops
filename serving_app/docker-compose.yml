@@ -14,6 +14,7 @@ services:
       MLFLOW_TRACKING_URI: sqlite:////app/runtime/mlflow.db
     volumes:
       - uploads:/app/data/uploads
+      - processed:/app/data/processed
       - models:/app/serving_app/models
       - logs:/app/logs
       - mlflow-db:/app/runtime
@@ -21,6 +22,7 @@ services:
 
 volumes:
   uploads:
+  processed:
   models:
   logs:
   mlflow-db:
