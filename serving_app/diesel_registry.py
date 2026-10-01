@@ -93,7 +93,7 @@ def production_version(client: MlflowClient) -> str | None:
         versions = client.get_latest_versions(MODEL_NAME, ["Production"])
     except MlflowException:  # 등록 모델 이름이 아직 없음
         return None
-    return versions[0].version if versions else None
+    return str(versions[0].version) if versions else None  # sqlite 스토어는 int를 돌려준다
 
 
 def load_forecaster(version: str) -> DieselForecaster:
@@ -166,7 +166,7 @@ def log_and_gate(forecaster, frame, val_idx, meta: dict, run_name: str) -> dict:
                 MODEL_NAME, v.version, "Production", archive_existing_versions=True
             )
             client.set_registered_model_alias(MODEL_NAME, ALIAS, v.version)
-            result.update(promoted=True, version=v.version)
+            result.update(promoted=True, version=str(v.version))
             print(
                 f"[GATE PASSED] {MODEL_NAME} v{v.version} → Production (이전: {before or '없음'})"
             )
