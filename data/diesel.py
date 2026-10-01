@@ -3,7 +3,12 @@
 from datetime import date, timedelta
 from math import isfinite
 
-DIESEL_FEATURE_COLUMNS = ("diesel_price", "crude_oil_price", "usd_krw", "tax_or_supply_feature")
+DIESEL_FEATURE_COLUMNS = (
+    "diesel_price",
+    "singapore_diesel_price",
+    "usd_krw",
+    "tax_or_supply_feature",
+)
 
 
 def validate_diesel_rows(rows: list[dict]) -> list[dict]:
@@ -21,7 +26,7 @@ def validate_diesel_rows(rows: list[dict]) -> list[dict]:
         if not all(isfinite(value) for value in point.values()):
             raise ValueError("피처에 NaN/Infinity를 사용할 수 없습니다")
         if any(point[key] <= 0 for key in DIESEL_FEATURE_COLUMNS[:3]):
-            raise ValueError("경유 가격·국제유가·환율은 양수여야 합니다")
+            raise ValueError("경유 가격·싱가포르 경유 가격·환율은 양수여야 합니다")
         result.append({"date": day.isoformat(), **point})
         previous = day
     if not result:

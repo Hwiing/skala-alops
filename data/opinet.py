@@ -94,6 +94,24 @@ def load_opinet_diesel(path: str, column: str = DIESEL_COLUMN) -> list[dict]:
     return _load_opinet_product(path, column, "diesel_price")
 
 
+def load_opinet_diesel_many(paths: list[str]) -> list[dict]:
+    """기간별로 나눠 받은 경유 CSV를 이어 붙이고 경계의 중복·누락을 검사한다."""
+    if not paths:
+        raise ValueError("경유 원본 파일이 없습니다")
+    by_day: dict[str, float] = {}
+    for path in paths:
+        for row in load_opinet_diesel(path):
+            day, price = row["date"], row["diesel_price"]
+            if day in by_day and by_day[day] != price:
+                raise ValueError(f"{day} 경유 가격이 원본 파일 사이에서 다릅니다")
+            by_day[day] = price
+    days = sorted(by_day)
+    for previous, current in zip(days, days[1:]):
+        if date.fromisoformat(current) != date.fromisoformat(previous) + timedelta(days=1):
+            raise ValueError(f"{previous} 다음 날짜가 {current}입니다 (경유 가격 누락)")
+    return [{"date": day, "diesel_price": by_day[day]} for day in days]
+
+
 def main():
     import argparse
 

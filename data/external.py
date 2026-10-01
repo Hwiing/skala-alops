@@ -20,11 +20,17 @@ from data.opinet import parse_date, parse_number, parse_series, read_csv_text
 
 CRUDE_COLUMN = "Dubai"
 CRUDE_LAG_DAYS = 1
+SINGAPORE_DIESEL_COLUMN = "경유(0.001%)"
+SINGAPORE_DIESEL_LAG_DAYS = 1
 FX_LAG_DAYS = 0
-# 설·추석 연휴에도 국제유가·환율 공백은 일주일을 넘지 않는다. 넘으면 원본 누락으로 본다.
+# 기본 상한. 더 긴 공식 휴장 간격은 피처별 원본을 검증한 뒤 별도 상한을 쓴다.
 MAX_STALE_DAYS = 7
+# ECOS 2017-09-29~2017-10-10 관측 사이의 추석 연휴가 가장 길다.
+# 직전 값이 필요한 마지막 날(10-09)은 관측일로부터 10일이므로 10일까지만 허용한다.
+MAX_FX_STALE_DAYS = 10
 TAX_POLICY_PATH = "data/reference/gasoline_fuel_tax_cut.csv"
 MAX_CRUDE_USD_PER_BBL = 300
+MAX_SINGAPORE_DIESEL_USD_PER_BBL = 500
 
 
 def load_opinet_crude(path: str, column: str = CRUDE_COLUMN) -> list[tuple[date, float]]:
@@ -38,6 +44,26 @@ def load_opinet_crude(path: str, column: str = CRUDE_COLUMN) -> list[tuple[date,
             raise ValueError(
                 f"{day} 국제유가 {price}는 USD/bbl로 보기 어렵습니다. "
                 "오피넷 화면의 단위를 `$`로 두고 다시 저장하세요 (`원`은 원/L)"
+            )
+    return series
+
+
+def load_opinet_singapore_diesel(paths: list[str]) -> list[tuple[date, float]]:
+    """오피넷 싱가포르 경유(0.001%) 가격을 USD/bbl로 읽고 휴장일을 건너뛴다."""
+    if not paths:
+        raise ValueError("싱가포르 경유 원본 파일이 없습니다")
+    rows = []
+    for path in paths:
+        part = read_csv_text(path)
+        if not part or SINGAPORE_DIESEL_COLUMN not in part[0]:
+            raise ValueError(f"{path}: {SINGAPORE_DIESEL_COLUMN!r} 컬럼이 없습니다")
+        rows.extend(row for row in part if str(row.get(SINGAPORE_DIESEL_COLUMN) or "").strip())
+    series = parse_series(rows, "기간", SINGAPORE_DIESEL_COLUMN)
+    for day, price in series:
+        if price <= 0 or price > MAX_SINGAPORE_DIESEL_USD_PER_BBL:
+            raise ValueError(
+                f"{day} 싱가포르 경유 {price}는 USD/bbl로 보기 어렵습니다. "
+                "오피넷 단위를 `$`로 두고 다시 저장하세요 (`원`은 원/L)"
             )
     return series
 
