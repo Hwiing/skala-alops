@@ -8,14 +8,14 @@ Day1 baseline 학습(scripts/train_baseline_v1.py), Day2 MLflow 학습
 방지할 수 있습니다.
 
 입력 시퀀스: 최근 SEQ_LEN(20)일의 4개 피처
-타깃: 그다음 날의 gasoline_price
+타깃: 그다음 날의 diesel_price
 """
 
 import csv
 import pickle
 
 SEQ_LEN = 20
-FEATURE_COLUMNS = ("gasoline_price", "crude_oil_price", "usd_krw", "tax_or_supply_feature")
+FEATURE_COLUMNS = ("diesel_price", "singapore_diesel_price", "usd_krw", "tax_or_supply_feature")
 
 
 def validate_rows(rows: list[dict]) -> list[dict]:
@@ -69,10 +69,10 @@ class GasolineScaler:
         return [self._scale(key, point[key]) for key in FEATURE_COLUMNS]
 
     def scale_price(self, price: float) -> float:
-        return self._scale("gasoline_price", price)
+        return self._scale("diesel_price", price)
 
     def inverse_price(self, scaled_price: float) -> float:
-        key = "gasoline_price"
+        key = "diesel_price"
         lo, hi = self.minimums[key], self.maximums[key]
         return scaled_price * (hi - lo if hi != lo else 1.0) + lo
 
@@ -97,7 +97,7 @@ def build_sequences(rows: list[dict], scaler: GasolineScaler, seq_len: int = SEQ
     X, y = [], []
     for i in range(len(rows) - seq_len):
         X.append(points[i : i + seq_len])
-        y.append(rows[i + seq_len]["gasoline_price"])
+        y.append(rows[i + seq_len]["diesel_price"])
     return X, y
 
 

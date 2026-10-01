@@ -134,8 +134,8 @@
       <h2>휘발유 데이터 업로드</h2>
       <p>
         <code>data/uploads/</code>는 여기서 업로드한 CSV만 쌓이는 곳입니다. 학습(<code>train_and_register.py</code> 등)은
-        항상 가장 최근에 올라온 파일을 사용합니다. <code>data/sample_gasoline_prices.csv</code>는 합성 데이터입니다. 연결 확인용으로 올려보세요
-        (컬럼: date, gasoline_price, crude_oil_price, usd_krw, tax_or_supply_feature · 최소 41행).
+        항상 가장 최근에 올라온 파일을 사용합니다. <code>data/sample_diesel_prices.csv</code>는 합성 데이터입니다. 연결 확인용으로 올려보세요
+        (컬럼: date, diesel_price, singapore_diesel_price, usd_krw, tax_or_supply_feature · 최소 41행).
       </p>
     </div>
     <div class="upload-row">
@@ -359,7 +359,7 @@ async function sendBatch(kind) {
   statusEl.innerHTML = `<span class="pill warn"><span class="dot"></span>전송 중… (fine-tuning이 걸리면 수십 초 걸릴 수 있습니다)</span>`;
 
   try {
-    const res = await fetch("/predict/batch-test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: prices.map(gasoline_price => ({gasoline_price, crude_oil_price: 75, usd_krw: 1350, tax_or_supply_feature: 0})) }) });
+    const res = await fetch("/predict/batch-test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: prices.map(diesel_price => ({diesel_price, singapore_diesel_price: 75, usd_krw: 1350, tax_or_supply_feature: 0})) }) });
     const data = await safeJson(res);
     if (!res.ok) {
       const reason = data.__raw

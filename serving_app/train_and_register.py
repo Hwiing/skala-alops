@@ -9,7 +9,7 @@ Day3: 드리프트 감지 후 Production 가중치에서 이어서 학습하는 
        10 epoch만 fine-tuning (처음부터 다시 학습하지 않음 - 30일로는 스크래치 학습이 불안정)
 
 실행:
-    (대시보드에서 휘발유 CSV를 먼저 업로드하세요 - data/sample_gasoline_prices.csv가 예시입니다)
+    (대시보드에서 휘발유 CSV를 먼저 업로드하세요 - data/sample_diesel_prices.csv가 예시입니다)
     python scripts/train_baseline_v1.py     # 최초 1회 (scaler.pkl 생성)
     python serving_app/train_and_register.py
 """
@@ -101,7 +101,7 @@ def train_and_register(csv_path: str | None = None, rows: list[dict] | None = No
         score = rmse(y_test, preds)
         # 동일한 검증 타깃의 직전 날 가격을 naive 예측으로 사용.
         naive_preds = [
-            rows[i - 1]["gasoline_price"] for i in range(len(rows) - len(y_test), len(rows))
+            rows[i - 1]["diesel_price"] for i in range(len(rows) - len(y_test), len(rows))
         ]
         naive_score = rmse(y_test, naive_preds)
 
@@ -134,7 +134,7 @@ def fine_tune(rows: list[dict]) -> dict:
         score = rmse(y_test, preds)
         # 동일한 검증 타깃의 직전 날 가격을 naive 예측으로 사용.
         naive_preds = [
-            rows[i - 1]["gasoline_price"] for i in range(len(rows) - len(y_test), len(rows))
+            rows[i - 1]["diesel_price"] for i in range(len(rows) - len(y_test), len(rows))
         ]
         naive_score = rmse(y_test, naive_preds)
 

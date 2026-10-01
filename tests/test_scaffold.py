@@ -13,7 +13,7 @@ from serving_app.monitoring import retrain_trigger
 from serving_app.routers import data as data_router
 from serving_app.routers import predict as predict_router
 
-SAMPLE = Path("data/sample_gasoline_prices.csv")
+SAMPLE = Path("data/sample_diesel_prices.csv")
 
 
 @pytest.fixture
@@ -46,7 +46,7 @@ def test_invalid_sequence_length(client, length):
 @pytest.mark.parametrize("value", [0, -1, "NaN", "Infinity"])
 def test_invalid_price(client, value):
     body = payload()
-    body["sequence"][0]["gasoline_price"] = value
+    body["sequence"][0]["diesel_price"] = value
     assert client.post("/predict", json=body).status_code == 422
 
 
@@ -205,9 +205,9 @@ def test_sequences_align_next_day_and_scaler_roundtrip(tmp_path):
     X, y = build_sequences(rows, scaler)
     assert len(X) == len(y) == 100
     assert len(X[0]) == 20 and len(X[0][0]) == 4
-    assert y[0] == rows[20]["gasoline_price"]
+    assert y[0] == rows[20]["diesel_price"]
     for row in (rows[0], rows[-1]):
-        price = row["gasoline_price"]
+        price = row["diesel_price"]
         assert scaler.inverse_price(scaler.scale_price(price)) == pytest.approx(price)
     path = str(tmp_path / "scaler.pkl")
     scaler.save(path)
@@ -232,9 +232,9 @@ def _bad_uploads():
     rows = list(csv.DictReader(io.StringIO(SAMPLE.read_text())))
     fields = list(rows[0].keys())
     negative = [dict(r) for r in rows]
-    negative[5]["gasoline_price"] = "-1"
+    negative[5]["diesel_price"] = "-1"
     return {
-        "missing_column": _csv(rows, [f for f in fields if f != "gasoline_price"]).encode(),
+        "missing_column": _csv(rows, [f for f in fields if f != "diesel_price"]).encode(),
         "too_few_rows": _csv(rows[:40], fields).encode(),
         "non_positive": _csv(negative, fields).encode(),
         "not_utf8": _csv(rows, fields).encode("utf-16"),

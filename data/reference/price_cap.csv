@@ -1,0 +1,11 @@
+start_date,end_date,gasoline_cap_won_l,diesel_cap_won_l,announced_date,source,notes
+2026-03-13,2026-03-26,1724,1713,2026-03-12,https://news.mtn.co.kr/news-detail/2026031213302131945,"1차 최초 지정; 등유 1320; 2주; 산식=기준가격(2월 마지막주 정유사 세전공급가)×MOPS 변동률+제세금"
+2026-03-27,2026-04-09,1934,1923,2026-03-26,https://www.heraldk.com/article/2026032603000039443,"2차 +210원 인상; 등유 1530; 2주"
+2026-04-10,2026-04-23,1934,1923,2026-04-09,https://www.motir.go.kr/kor/article/ATCL3f49a5a8c/171712/view,"3차 동결; 등유 1530; 2주; 보조출처 https://www.newsis.com/view/NISX20260409_0003584885"
+2026-04-24,2026-05-07,1934,1923,2026-04-23,https://www.motir.go.kr/kor/article/ATCL3f49a5a8c/171763/view,"4차 동결; 등유 1530; 2주; 보조출처 https://www.newsis.com/view/NISX20260423_0003604124"
+2026-05-08,2026-05-21,1934,1923,2026-05-07,https://www.heraldk.com/article/2026050702042559187,"5차 동결; 등유 1530; 2주"
+2026-05-22,2026-06-26,1934,1923,2026-05-21,https://www.motir.go.kr/kor/article/ATCL3f49a5a8c/171857/view,"6차 동결; 등유 1530; 조정주기 2주→4주 변경; 원래 6/18 종료 예정이었으나 6/18 발표로 7차 연기·6차 연장(https://futurechosun.com/archives/151997)"
+2026-06-27,2026-07-24,1784,1773,2026-06-26,https://www.heraldk.com/article/2026062602000080837,"7차 150원 인하; 등유 1380; 4주; 보조출처 https://www.korea.kr/news/policyNewsView.do?newsId=148967228"
+2026-07-25,2026-08-21,1784,1773,2026-07-24,https://www.dailian.co.kr/news/view/1670703/,"8차 동결; 등유 1380; 4주"
+2026-08-22,2026-09-18,1784,1773,2026-08-21,https://news.mtn.co.kr/news-detail/2026082116250345761,"9차 동결; 등유 1380; 4주"
+2026-09-19,2026-10-16,1784,1773,2026-09-18,https://www.newsis.com/view/NISX20260918_0003795839,"10차 동결; 등유 1380; 4주; 2026-09-30 기준 시행 중(end_date는 예정일); 정부는 종료 시한 없음 공식 해명(https://www.motir.go.kr/kor/article/ATCL3f49a5a8c/172198/view)"
