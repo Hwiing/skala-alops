@@ -1,0 +1,30 @@
+{
+  "base_date": "2026-04-30",
+  "model_version": "champion:3",
+  "predictions": [
+    {
+      "horizon_week": 1,
+      "start_date": "2026-05-01",
+      "end_date": "2026-05-07",
+      "predicted_avg_price": 1601.0
+    },
+    {
+      "horizon_week": 2,
+      "start_date": "2026-05-08",
+      "end_date": "2026-05-14",
+      "predicted_avg_price": 1602.0
+    },
+    {
+      "horizon_week": 3,
+      "start_date": "2026-05-15",
+      "end_date": "2026-05-21",
+      "predicted_avg_price": 1603.0
+    },
+    {
+      "horizon_week": 4,
+      "start_date": "2026-05-22",
+      "end_date": "2026-05-28",
+      "predicted_avg_price": 1604.0
+    }
+  ]
+}

@@ -9,11 +9,12 @@ import os
 from fastapi import APIRouter
 
 from serving_app import model_loader
+from serving_app.schemas import HealthResponse
 
 router = APIRouter()
 
 
-@router.get("/health")
+@router.get("/health", response_model=HealthResponse)
 def health():
     model = model_loader._model_cache
     return {

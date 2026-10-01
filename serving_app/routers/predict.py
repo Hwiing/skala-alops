@@ -1,40 +1,121 @@
 """
-Day1 -> Day3(시뮬레이션 엔드포인트 추가) 확장 파일.
-
-Day1: POST /predict - 최근 SEQ_LEN(20)일 시퀀스로 다음날 휘발유 가격 예측
-Day3: POST /predict/batch-test - 드리프트 감지 시뮬레이션 시작점 (scripts/simulate_drift.py 참고)
+POST /predict - 최근 120일(날짜 포함)로 다음 1~4주 경유 평균가 예측 (contracts.md v2)
+POST /predict/batch-test - 드리프트 감지 시뮬레이션 시작점 (scripts/simulate_drift.py 참고)
 """
 
-from fastapi import APIRouter, HTTPException
+from datetime import date, timedelta
 
+from fastapi import APIRouter, HTTPException
+from pydantic import ValidationError
+
+from data.diesel_features import INPUT_DAYS, WINDOWS
 from serving_app import model_loader
-from serving_app.schemas import BatchTestRequest, BatchTestResponse, PredictRequest, PredictResponse
+from serving_app.monitoring import prediction_window, retrain_trigger
+from serving_app.monitoring.prediction_window import PredictionWindow
+from serving_app.schemas import (
+    BatchPair,
+    BatchTestRequest,
+    BatchTestResponse,
+    DriftCheck,
+    PredictionValues,
+    PredictRequest,
+    PredictResponse,
+    WeekPrediction,
+)
 
 router = APIRouter()
 
-# Day3: 최근 예측 기록(actual/predicted)을 쌓아두는 슬라이딩 윈도우.
-# monitoring/drift_detector.py의 WINDOW_SIZE(21)만큼만 유지한다.
-recent_predictions: list[dict] = []
+# 최근 예측 기록. AIOps 내부 윈도우(#15)에 모델 버전·출처(batch)와 함께 남긴다.
+# 같은 기준일은 덮어쓰고(재집계 방지), 잠금으로 동시 배치를 보호한다. HTTP 응답의 BatchPair와는 별개 타입.
+recent_predictions: PredictionWindow = prediction_window.window
 
 
-@router.post("/predict", response_model=PredictResponse)
-def predict(req: PredictRequest):
+def _get_model_or_503():
     try:
-        model = model_loader.get_model()
+        return model_loader.get_model()
     except (FileNotFoundError, NotImplementedError, ImportError) as exc:
         raise HTTPException(
             503, "모델이 준비되지 않았습니다. 학습 또는 MLflow TODO를 완료하세요."
         ) from exc
-    sequence = [p.model_dump() for p in req.sequence]
-    predicted_price = model.predict_one(sequence)
-    return PredictResponse(predicted_price=round(predicted_price, 2), model_version=model.version)
 
 
-@router.post("/predict/batch-test", response_model=BatchTestResponse)
+def _weeks(base: date, values: list[float]) -> list[WeekPrediction]:
+    """k주 = base+7(k−1)+1 ~ base+7k."""
+    return [
+        WeekPrediction(
+            horizon_week=k,
+            start_date=base + timedelta(days=w[0]),
+            end_date=base + timedelta(days=w[-1]),
+            predicted_avg_price=round(v, 2),
+        )
+        for k, (w, v) in enumerate(zip(WINDOWS, values), start=1)
+    ]
+
+
+def _predict_values(model, rows: list[dict]) -> list[float]:
+    try:
+        return PredictionValues(values=model.predict(rows)).values
+    except (ValidationError, ValueError, TypeError) as exc:
+        raise HTTPException(503, "모델 출력이 경유 4주 예측 계약에 맞지 않습니다") from exc
+
+
+def _pair_with_actual(model, rows: list[dict]) -> list[dict]:
+    """rows[i:i+120]마다 1~4주를 예측하고, 기준일 뒤 k주 실제 평균·naive(기준일 가격)를 붙인다."""
+    prices = [r["diesel_price"] for r in rows]
+    pairs = []
+    for b in range(INPUT_DAYS - 1, len(rows) - 7 * len(WINDOWS)):
+        pairs.append(
+            {
+                "date": rows[b]["date"],
+                "predicted": [
+                    round(v, 2) for v in _predict_values(model, rows[b - INPUT_DAYS + 1 : b + 1])
+                ],
+                "actual": [round(sum(prices[b + d] for d in w) / 7, 2) for w in WINDOWS],
+                "naive": prices[b],
+            }
+        )
+    return [BatchPair.model_validate(p).model_dump(mode="json") for p in pairs]
+
+
+@router.post("/predict", response_model=PredictResponse)
+def predict(req: PredictRequest):
+    model = _get_model_or_503()
+    base = req.sequence[-1].date
+    values = _predict_values(model, [p.model_dump(mode="json") for p in req.sequence])
+    return PredictResponse(
+        predictions=_weeks(base, values), base_date=base, model_version=model.version
+    )
+
+
+@router.post(
+    "/predict/batch-test", response_model=BatchTestResponse, response_model_exclude_none=True
+)
 def batch_test(req: BatchTestRequest):
-    """TODO(hootbee + kchanis1223): req.rows의 20일 윈도우를 순서대로 예측.
+    """기준일을 하루씩 밀며 1~4주를 예측하고 AIOps 판정(check_and_trigger)을 돌려준다.
 
-    다음 행 diesel_price를 actual로 연결하고 recent_predictions 최근 21건 유지.
-    check_and_trigger 결과를 반환. 원본 TODO 미구현 상태를 성공으로 표시하지 않는다.
+    재학습으로 새 버전이 승격되면 그 버전을 서빙하도록 교체하고(reload_model),
+    실제로 그 버전이 올라왔을 때만 이전 모델의 예측 기록을 비운다(#14 역할 분담).
     """
-    raise HTTPException(501, "TODO: batch_test 슬라이딩 예측 및 드리프트 연결")
+    model = _get_model_or_503()
+    pairs = _pair_with_actual(model, [p.model_dump(mode="json") for p in req.rows])
+    recent_predictions.record_batch(pairs, model.version)
+
+    try:
+        drift_check = DriftCheck.model_validate(
+            retrain_trigger.check_and_trigger(recent_predictions.pairs())
+        ).model_dump(exclude_none=True)
+    except NotImplementedError as exc:
+        raise HTTPException(501, f"AIOps 판정 미구현: {exc}") from exc
+    except ValidationError as exc:
+        raise HTTPException(503, "AIOps 결과가 공통 계약에 맞지 않습니다") from exc
+
+    if drift_check.get("promoted"):
+        drift_check["reload"] = model_loader.reload_model(drift_check.get("version"))
+        try:
+            DriftCheck.model_validate(drift_check)
+        except ValidationError as exc:
+            raise HTTPException(503, "모델 교체 결과가 공통 계약에 맞지 않습니다") from exc
+        if drift_check["reload"]["reloaded"]:
+            recent_predictions.clear()
+
+    return BatchTestResponse(predictions=pairs, drift_check=drift_check)

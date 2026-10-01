@@ -1,34 +1,32 @@
 """
-AIOps 1/3 (#15): 예측·실제값 짝으로 성능 저하(드리프트)를 판정한다.
+AIOps 1/3 (#15): 경유 v2 드리프트 판정 (docs/contracts.md "AIOps 상태와 서빙 교체").
 
-판정 기준 (docs/contracts.md v2):
-    정답이 확보된 최근 WINDOW_SIZE(28)건에서
+    정답이 확보된 최근 PAIR_WINDOW(28)개 기준일에서
         1주차 모델 RMSE  >  같은 기간 naive RMSE   →  drift
-    - 1주차 정답은 예측 7일 뒤에야 확보되므로, 정답이 없는 짝은 판정에서 뺀다(보류).
-    - naive = 마지막 입력일 가격을 그대로 쓰는 "무변화 예측". 고정 임계값(예: 10원) 대신
-      같은 기간의 naive와 비교하면, 시장 전체가 출렁여 모두가 틀리는 시기와
-      "우리 모델만 망가진" 시기를 구분할 수 있다.
-    - 동점(같음)은 drift가 아니다. 게이트(diesel_gate)는 RMSE < naive 여야 통과이므로,
-      naive와 같다는 것은 "합격선 위에 있다가 내려온 것"이 아니라 경계값일 뿐이다.
 
-짝(pair) 형식 - batch_test·prediction_window가 넘기는 dict:
-    {"date": "2026-08-01",            # 마지막 입력일(base_date)
-     "predicted": [p1, p2, p3, p4],   # 1~4주 평균 예측 (원/L)
-     "actual":    [a1, a2, a3, a4],   # 실제 평균. 아직 안 왔으면 None
-     "naive": 1541.0,                 # 마지막 입력일 가격
-     "model_version": "3"}            # 이 예측을 만든 모델 버전 (없으면 None)
+    - naive = 기준일 가격을 1주 뒤에도 그대로 쓰는 "무변화 예측". 고정 임계값(예: 10원) 대신
+      같은 기간 naive와 비교하면, 시장 급변으로 모두가 틀리는 시기와 "우리 모델만 망가진" 시기를
+      구분할 수 있다. 배포 게이트 50원과 탐지 기준은 별개다.
+    - 동점은 drift가 아니다 (게이트 통과 조건이 RMSE < naive이므로 경계값).
 
-반환 status:
-    "ok"           - 판정 완료, 정상
-    "drift"        - 판정 완료, 성능 저하 → retrain_trigger가 재학습 여부를 결정
-    "insufficient_data" - 정답이 확보된 짝이 WINDOW_SIZE 미만 → 판정 보류
-    "invalid"      - 잘못된 값(NaN·inf·형식 오류) → 판정 거부 (조용히 넘어가지 않는다)
+입력 짝 (HTTP BatchPair + 내부 기록용 선택 필드)
+    {"date": "2026-04-30",                 # 입력 기준일
+     "predicted": [p1, p2, p3, p4],         # 1~4주 평균 예측 (원/L)
+     "actual":    [a1, a2, a3, a4],         # 실제 평균. 실운영 기록에서 미도착이면 None
+     "naive": 1619.0,                       # 기준일 가격
+     "model_version": "champion:3"}         # 내부 기록에만 있음(prediction_window). 없으면 None
+
+evaluate()의 status는 탐지 내부 상태다 (API DriftCheck가 아님 - retrain_trigger가 변환).
+    "ok" / "drift"         판정 완료
+    "insufficient_data"    정답 확보 짝이 28개 미만 → 판정 보류 (정상으로 간주하지 않음)
+    "invalid"              잘못된 값 → 판정 거부 (일부만 버리고 판정하지 않는다)
 """
 
 import math
 
-WINDOW_SIZE = 28  # 정답이 확보된 최근 28건 (4주). contracts.md v2 드리프트 제안
-HORIZONS = 4  # 1~4주 예측
+from data.contracts import HORIZONS, PAIR_WINDOW
+
+WINDOW_SIZE = PAIR_WINDOW
 WEEK1 = 0  # 드리프트 판정은 1주차(가장 빨리 정답이 오는 주차)로만 한다
 
 
@@ -36,20 +34,23 @@ def _finite_number(value) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
-def compute_rmse(pairs: list[dict]) -> float:
-    """pairs: [{"predicted": float, "actual": float}, ...] → RMSE (원/L).
+def compute_rmse(pairs: list[dict], *, naive: bool = False) -> float:
+    """짝 목록의 1주차 RMSE (원/L). naive=True면 같은 짝의 naive 예측 RMSE.
 
-    RMSE = sqrt( mean( (actual - predicted) ** 2 ) )
-    - 빈 리스트는 0.0 (오차를 계산할 짝이 없음).
-    - NaN·inf가 섞이면 ValueError. NaN은 비교 연산이 항상 False라
-      "rmse > 기준"이 False → 드리프트를 조용히 놓치는 원인이 된다.
+    RMSE = sqrt( mean( (actual[0] - 예측) ** 2 ) ),  예측 = predicted[0] 또는 naive
+    - 빈 목록은 0.0.
+    - NaN·inf·None이 섞이면 ValueError. NaN은 비교가 항상 False라 "rmse > naive"가 False →
+      드리프트를 조용히 놓치는 원인이 된다.
     """
     if not pairs:
         return 0.0
+    squared = []
     for p in pairs:
-        if not (_finite_number(p.get("predicted")) and _finite_number(p.get("actual"))):
-            raise ValueError(f"비유한 값 또는 숫자가 아닌 값: {p}")
-    squared = [(p["actual"] - p["predicted"]) ** 2 for p in pairs]
+        guess = p.get("naive") if naive else (p.get("predicted") or [None])[WEEK1]
+        actual = (p.get("actual") or [None])[WEEK1]
+        if not (_finite_number(guess) and _finite_number(actual)):
+            raise ValueError(f"1주차 값이 유한한 숫자가 아닙니다: {p.get('date')}")
+        squared.append((actual - guess) ** 2)
     return math.sqrt(sum(squared) / len(squared))
 
 
@@ -66,16 +67,19 @@ def _validate_pair(pair: dict) -> str | None:
         return f"actual에 비유한 값: {pair.get('date')}"
     if not _finite_number(pair.get("naive")):
         return f"naive에 비유한 값: {pair.get('date')}"
+    if not pair.get("date"):
+        return "date가 없습니다"
     return None
 
 
 def evaluate(pairs: list[dict]) -> dict:
-    """짝 목록으로 드리프트를 판정해 상태 dict를 돌려준다 (batch_test·retrain_trigger용 계약).
+    """짝 목록으로 드리프트를 판정한다.
 
-    1) 잘못된 값이 하나라도 있으면 invalid  - 일부만 버리고 판정하면 결과를 믿을 수 없다.
-    2) 가장 최근 모델 버전의 짝만 쓴다    - 교체 전 모델의 오차로 새 모델을 탓하지 않도록.
-    3) 1주차 정답이 온 짝만 쓴다          - 미도착 짝은 pending으로 세고 보류.
-    4) 최근 WINDOW_SIZE건으로 모델 RMSE vs naive RMSE.
+    1) 잘못된 값이 하나라도 있으면 invalid.
+    2) 가장 최근 짝의 model_version과 같은 버전의 짝만 쓴다 - 교체 전 모델 오차로 새 모델을 탓하지 않는다.
+    3) 같은 기준일이 여러 번 들어오면 마지막 것 하나만 센다 - 배치 재전송으로 재집계하지 않는다.
+    4) 1주차 정답이 온 짝만 쓰고, 미도착은 pending으로 센다.
+    5) 최근 28개로 모델 RMSE vs naive RMSE.
     """
     for pair in pairs:
         reason = _validate_pair(pair)
@@ -83,11 +87,19 @@ def evaluate(pairs: list[dict]) -> dict:
             return {"status": "invalid", "reason": reason}
 
     model_version = pairs[-1].get("model_version") if pairs else None
-    same_model = [p for p in pairs if p.get("model_version") == model_version]
+    latest_by_date: dict[str, dict] = {}
+    for p in pairs:
+        if p.get("model_version") == model_version:
+            latest_by_date.pop(str(p["date"]), None)  # 다시 넣어 순서를 최신으로
+            latest_by_date[str(p["date"])] = p
+    same_model = sorted(latest_by_date.values(), key=lambda p: str(p["date"]))
     matured = [p for p in same_model if p["actual"][WEEK1] is not None]
-    pending = len(same_model) - len(matured)
 
-    base = {"model_version": model_version, "window_size": WINDOW_SIZE, "pending": pending}
+    base = {
+        "model_version": model_version,
+        "window_size": WINDOW_SIZE,
+        "pending": len(same_model) - len(matured),
+    }
     if len(matured) < WINDOW_SIZE:
         return {
             "status": "insufficient_data",
@@ -99,22 +111,18 @@ def evaluate(pairs: list[dict]) -> dict:
         }
 
     window = matured[-WINDOW_SIZE:]
-    week1_rmse = compute_rmse(
-        [{"predicted": p["predicted"][WEEK1], "actual": p["actual"][WEEK1]} for p in window]
-    )
-    naive_rmse = compute_rmse(
-        [{"predicted": p["naive"], "actual": p["actual"][WEEK1]} for p in window]
-    )
+    week1_rmse = compute_rmse(window)
+    naive_rmse = compute_rmse(window, naive=True)
     return {
         "status": "drift" if week1_rmse > naive_rmse else "ok",
         "n": len(window),
         "week1_rmse": round(week1_rmse, 2),
         "naive_rmse": round(naive_rmse, 2),
-        "period": [window[0].get("date"), window[-1].get("date")],
+        "period": [str(window[0]["date"]), str(window[-1]["date"])],
         **base,
     }
 
 
 def is_drift(pairs: list[dict]) -> bool:
-    """retrain_trigger 호환용 단축 함수. 판정 보류·잘못된 값은 drift가 아니다(재학습 안 함)."""
+    """판정 보류·잘못된 값은 drift가 아니다 (재학습하지 않음)."""
     return evaluate(pairs)["status"] == "drift"
