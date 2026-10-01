@@ -3,214 +3,440 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>AIOps · 휘발유 재학습 파이프라인</title>
+<meta name="color-scheme" content="light dark" />
+<title>유가 AIOps</title>
 <link rel="icon" type="image/x-icon" href="/favicon.ico" />
 <style>
+  /* ===================== Design tokens ===================== */
   :root {
-    --bg: #0a0c10;
-    --panel: #12151c;
-    --panel-2: #171b25;
-    --border: #262b38;
-    --text: #eef1f7;
-    --muted: #9aa4b8;
-    --faint: #5b6478;
-    --accent: #6c8dff;
-    --accent-soft: rgba(108, 141, 255, 0.16);
-    --ok: #3ddc97;
-    --ok-soft: rgba(61, 220, 151, 0.14);
-    --warn: #f5b64c;
-    --warn-soft: rgba(245, 182, 76, 0.14);
-    --err: #ff6b6b;
-    --err-soft: rgba(255, 107, 107, 0.14);
-    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Pretendard, sans-serif;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+    /* color: neutral 중심, accent는 primary action·선택 상태에만 */
+    --bg: #ffffff;
+    --surface: #f5f6f8;
+    --surface-hover: #eceef1;
+    --line: #e4e7eb;
+    --text: #191c21;
+    --text-2: #4b535e;
+    --text-3: #6b737e;
+    --accent: #2f62e9;
+    --accent-hover: #2552cc;
+    --accent-pressed: #1f46ad;
+    --accent-soft: #eaf0fe;
+    --on-accent: #ffffff;
+    --ok: #12804a;
+    --ok-soft: #e7f5ee;
+    --warn: #a35f00;
+    --warn-soft: #fdf3e2;
+    --err: #c9302c;
+    --err-soft: #fdecec;
+    --focus: 0 0 0 3px rgba(47, 98, 233, 0.35);
 
-  .topnav {
-    display: flex; align-items: center; gap: 14px; justify-content: space-between;
-    background: var(--panel); border-bottom: 1px solid var(--border);
-    padding: 0 20px; height: 60px; position: sticky; top: 0; z-index: 10;
-  }
-  .brand { display: flex; align-items: center; gap: 10px; }
-  .brand-mark {
-    width: 34px; height: 34px; border-radius: 9px;
-    background: linear-gradient(135deg, var(--accent), #a9bdff);
-    display: flex; align-items: center; justify-content: center; color: #0a0c10;
-    flex-shrink: 0;
-  }
-  .brand-text .title { font-weight: 700; font-size: 1.02rem; line-height: 1.2; }
-  .brand-text .subtitle { font-size: 0.72rem; color: var(--muted); }
-  .nav-right { display: flex; align-items: center; gap: 10px; font-size: 0.8rem; color: var(--muted); }
-  .pill {
-    display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px;
-    font-size: 0.74rem; font-weight: 700;
-  }
-  .pill.ok { background: var(--ok-soft); color: var(--ok); }
-  .pill.warn { background: var(--warn-soft); color: var(--warn); }
-  .pill.err { background: var(--err-soft); color: var(--err); }
-  .pill.neutral { background: var(--panel-2); color: var(--muted); }
-  .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    /* typography */
+    --sans: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", "Noto Sans KR", sans-serif;
+    --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    --fs-display: 1.75rem;   /* 28 page title */
+    --fs-title: 1.25rem;     /* 20 section title */
+    --fs-headline: 1.0625rem;/* 17 emphasized body */
+    --fs-body: 0.9375rem;    /* 15 primary body */
+    --fs-sub: 0.875rem;      /* 14 secondary body */
+    --fs-caption: 0.8125rem; /* 13 caption/metadata */
+    --fs-metric: 2rem;       /* 32 key number */
 
-  .page { max-width: 980px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+    /* spacing (4px base) */
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
 
-  .card {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
-    padding: 18px 20px;
+    /* radius / layout / motion */
+    --r-sm: 8px; --r-md: 12px; --r-full: 999px;
+    --container: 960px;
+    --gutter: 24px;
+    --icon: 16px;
+    --ease: cubic-bezier(0.2, 0, 0, 1);
+    --dur: 160ms;
   }
-  .section-head { margin-bottom: 14px; }
-  .section-head h2 { margin: 0 0 3px; font-size: 1.05rem; }
-  .section-head p { margin: 0; color: var(--muted); font-size: 0.82rem; line-height: 1.5; }
-  .section-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-
-  .btn { border: none; border-radius: 9px; padding: 9px 14px; font-size: 0.83rem; font-weight: 700; cursor: pointer; }
-  .btn.primary { background: var(--accent); color: #0a0c10; }
-  .btn.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
-  .btn.danger { background: var(--err); color: #1a0a0a; }
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .btn-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
-
-  /* ---------- Upload ---------- */
-  .upload-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  input[type="file"] {
-    color: var(--muted); font-size: 0.82rem; max-width: 100%;
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101215;
+      --surface: #181b20;
+      --surface-hover: #20242a;
+      --line: #2a2e35;
+      --text: #f1f3f5;
+      --text-2: #b4bbc4;
+      --text-3: #8d959f;
+      --accent: #5c8bff;
+      --accent-hover: #769dff;
+      --accent-pressed: #4a78ea;
+      --accent-soft: rgba(92, 139, 255, 0.14);
+      --on-accent: #0b1020;
+      --ok: #3fcf8e;
+      --ok-soft: rgba(63, 207, 142, 0.12);
+      --warn: #f2b14c;
+      --warn-soft: rgba(242, 177, 76, 0.12);
+      --err: #ff7a76;
+      --err-soft: rgba(255, 122, 118, 0.12);
+      --focus: 0 0 0 3px rgba(92, 139, 255, 0.45);
+    }
   }
 
-  /* ---------- Pipeline ---------- */
-  .pipeline-meta { display: flex; align-items: center; gap: 10px; font-size: 0.8rem; color: var(--muted); }
-  .pipeline-track { display: flex; align-items: stretch; overflow-x: auto; padding: 2px 2px 4px; gap: 0; }
-  .pipe-stage { flex: 1; min-width: 110px; text-align: center; padding: 10px 10px; border-left: 1px solid var(--border); }
-  .pipe-stage:first-child { border-left: none; }
-  .pipe-title { font-size: 0.82rem; font-weight: 700; color: var(--faint); }
-  .pipe-stage.ok .pipe-title, .pipe-stage.warn .pipe-title { color: var(--text); }
-  .pipe-desc { font-size: 0.7rem; color: var(--muted); margin: 2px 0 6px; line-height: 1.4; }
-  .pipe-status { font-size: 0.7rem; font-weight: 700; }
-  .pipe-stage.ok .pipe-status { color: var(--ok); }
-  .pipe-stage.warn .pipe-status { color: var(--warn); }
-  .pipe-stage.idle .pipe-status { color: var(--faint); }
-
-  /* ---------- Tables ---------- */
-  table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
-  th { text-align: left; color: var(--muted); font-weight: 600; font-size: 0.74rem; text-transform: uppercase;
-       letter-spacing: 0.03em; padding: 8px 10px; border-bottom: 1px solid var(--border); }
-  td { padding: 9px 10px; border-bottom: 1px solid var(--border); }
-  tr:last-child td { border-bottom: none; }
-  .table-empty { color: var(--faint); font-size: 0.82rem; padding: 20px 4px; text-align: center; }
-
-  .result-box {
-    margin-top: 12px; padding: 12px 14px; border-radius: 10px; background: var(--panel-2);
-    border: 1px solid var(--border); font-family: var(--mono); font-size: 0.8rem;
-    white-space: pre-wrap; word-break: break-word; display: none; max-height: 260px; overflow-y: auto;
+  /* ===================== Base ===================== */
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: var(--sans); font-size: var(--fs-body); line-height: 1.6;
+    -webkit-font-smoothing: antialiased; letter-spacing: -0.005em;
   }
-  .result-box.show { display: block; }
+  h1, h2, h3, p { margin: 0; }
+  code { font-family: var(--mono); font-size: 0.92em; color: var(--text-2); }
+  :focus-visible { outline: none; box-shadow: var(--focus); border-radius: var(--r-sm); }
+  .visually-hidden {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  .container { max-width: calc(var(--container) + var(--gutter) * 2); margin: 0 auto; padding: 0 var(--gutter); }
 
-  code { font-family: var(--mono); background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
-  footer { color: var(--faint); font-size: 0.76rem; text-align: center; margin: 26px 0 10px; }
+  /* ===================== Typography roles ===================== */
+  .t-display { font-size: var(--fs-display); font-weight: 700; line-height: 1.3; letter-spacing: -0.025em; }
+  .t-title { font-size: var(--fs-title); font-weight: 650; line-height: 1.4; letter-spacing: -0.02em; }
+  .t-headline { font-size: var(--fs-headline); font-weight: 600; line-height: 1.5; letter-spacing: -0.01em; }
+  .t-sub { font-size: var(--fs-sub); color: var(--text-2); line-height: 1.6; }
+  .t-caption { font-size: var(--fs-caption); color: var(--text-3); line-height: 1.5; }
+
+  /* ===================== Header ===================== */
+  .header {
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: saturate(180%) blur(12px); -webkit-backdrop-filter: saturate(180%) blur(12px);
+    border-bottom: 1px solid var(--line);
+  }
+  .header-inner { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); height: 56px; }
+  .brand { display: flex; align-items: center; gap: var(--s2); font-weight: 700; font-size: var(--fs-body); letter-spacing: -0.01em; }
+  .brand svg { color: var(--accent); }
+  .model-status { display: flex; align-items: center; gap: var(--s2); font-size: var(--fs-caption); color: var(--text-2); min-width: 0; }
+  .model-status .meta { color: var(--text-3); white-space: nowrap; }
+  .model-status strong { font-weight: 600; color: var(--text); white-space: nowrap; }
+
+  /* status dot */
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); flex-shrink: 0; }
+  .dot.ok { background: var(--ok); }
+  .dot.warn { background: var(--warn); }
+  .dot.err { background: var(--err); }
+
+  /* ===================== Sections ===================== */
+  main { padding: var(--s7) 0 var(--s8); }
+  .intro { margin-bottom: var(--s7); }
+  .intro .t-sub { margin-top: var(--s2); max-width: 36em; font-size: var(--fs-body); }
+  .section { padding: var(--s7) 0; border-top: 1px solid var(--line); }
+  .section:first-of-type { border-top: none; padding-top: 0; }
+  .section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s4); margin-bottom: var(--s5); flex-wrap: wrap; }
+  .section-head .t-sub { margin-top: var(--s1); }
+
+  /* surface: 섹션 안에서 한 단계만 배경 대비를 준다 (중첩 금지) */
+  .surface { background: var(--surface); border-radius: var(--r-md); padding: var(--s5); }
+
+  /* ===================== Buttons ===================== */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
+    height: 44px; padding: 0 var(--s5); border: none; border-radius: var(--r-sm);
+    font: inherit; font-size: var(--fs-body); font-weight: 600; letter-spacing: -0.01em;
+    cursor: pointer; white-space: nowrap; user-select: none;
+    transition: background-color var(--dur) var(--ease), transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
+  }
+  .btn:active:not(:disabled) { transform: scale(0.98); }
+  .btn:disabled { cursor: not-allowed; opacity: 0.45; }
+  .btn[aria-busy="true"] { opacity: 1; cursor: progress; }
+  .btn-primary { background: var(--accent); color: var(--on-accent); }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+  .btn-primary:active:not(:disabled) { background: var(--accent-pressed); }
+  .btn-secondary { background: var(--surface); color: var(--text); }
+  .btn-secondary:hover:not(:disabled) { background: var(--surface-hover); }
+  .surface .btn-secondary { background: var(--bg); }
+  .surface .btn-secondary:hover:not(:disabled) { background: var(--surface-hover); }
+  .btn-ghost { background: transparent; color: var(--text-2); height: 36px; padding: 0 var(--s3); font-size: var(--fs-sub); }
+  .btn-ghost:hover:not(:disabled) { background: var(--surface); color: var(--text); }
+  .btn-block { width: 100%; }
+
+  .spinner {
+    width: var(--icon); height: var(--icon); border-radius: 50%;
+    border: 2px solid currentColor; border-right-color: transparent;
+    animation: spin 0.7s linear infinite; display: none;
+  }
+  [aria-busy="true"] .spinner { display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ===================== Segmented control (radio) ===================== */
+  .segmented {
+    display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+    background: var(--surface); border-radius: var(--r-sm); padding: 3px; border: none; margin: 0;
+  }
+  .surface .segmented { background: var(--surface-hover); }
+  .segmented input { position: absolute; opacity: 0; pointer-events: none; }
+  .segmented label {
+    padding: var(--s2) var(--s5); border-radius: 6px; text-align: center; cursor: pointer;
+    font-size: var(--fs-sub); font-weight: 600; color: var(--text-2);
+    transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
+  }
+  .segmented input:checked + label { background: var(--bg); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+  .segmented input:focus-visible + label { box-shadow: var(--focus); }
+
+  /* ===================== Run panel ===================== */
+  .run { display: grid; grid-template-columns: 1fr auto; gap: var(--s5); align-items: center; }
+  .run-options { display: flex; flex-direction: column; gap: var(--s3); align-items: flex-start; }
+
+  /* ===================== Result ===================== */
+  .result { margin-top: var(--s6); }
+  .result-status { display: flex; align-items: flex-start; gap: var(--s3); }
+  .result-status .dot { margin-top: 9px; width: 10px; height: 10px; }
+  .result-status .t-sub { margin-top: 2px; }
+  .metrics {
+    display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+    margin-top: var(--s5); padding-top: var(--s5); border-top: 1px solid var(--line);
+  }
+  .metric { padding-right: var(--s4); }
+  .metric + .metric { padding-left: var(--s4); border-left: 1px solid var(--line); }
+  .metric dt { font-size: var(--fs-caption); color: var(--text-3); }
+  .metric dd {
+    margin: var(--s1) 0 0; font-size: var(--fs-metric); font-weight: 700; letter-spacing: -0.03em;
+    line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+  }
+  .metric dd small { font-size: var(--fs-sub); font-weight: 500; color: var(--text-3); margin-left: 2px; letter-spacing: 0; }
+  .metric dd.is-text { font-size: var(--fs-headline); font-weight: 600; padding-top: 8px; letter-spacing: -0.01em; }
+
+  .notice { display: flex; gap: var(--s3); align-items: flex-start; padding: var(--s4); border-radius: var(--r-sm); font-size: var(--fs-sub); }
+  .notice.warn { background: var(--warn-soft); color: var(--text); }
+  .notice.err { background: var(--err-soft); color: var(--text); }
+  .notice .dot { margin-top: 7px; }
+  .notice strong { display: block; font-weight: 600; }
+
+  .empty { color: var(--text-3); font-size: var(--fs-sub); padding: var(--s5) 0; }
+
+  /* ===================== Pipeline stepper ===================== */
+  .stepper { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  .step { position: relative; padding-top: 28px; padding-right: var(--s2); }
+  .step::before { /* 연결선 */
+    content: ""; position: absolute; top: 9px; left: 0; right: 0; height: 2px; background: var(--line);
+  }
+  .step:first-child::before { left: 10px; }
+  .step:last-child::before { right: auto; width: 10px; }
+  .step.ok::before { background: var(--ok); }
+  .marker {
+    position: absolute; top: 0; left: 0; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--bg); border: 2px solid var(--line); display: grid; place-items: center;
+    transition: background-color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  }
+  .marker svg { width: 12px; height: 12px; display: none; }
+  .step.ok .marker { background: var(--ok); border-color: var(--ok); color: var(--bg); }
+  .step.warn .marker { background: var(--warn); border-color: var(--warn); color: var(--bg); }
+  .step.ok .marker .i-check, .step.warn .marker .i-alert { display: block; }
+  .step-title { font-size: var(--fs-sub); font-weight: 600; color: var(--text-3); line-height: 1.4; }
+  .step.ok .step-title, .step.warn .step-title { color: var(--text); }
+  .step-desc { font-size: var(--fs-caption); color: var(--text-3); }
+  .step-status { font-size: var(--fs-caption); font-weight: 600; margin-top: var(--s1); color: var(--text-3); overflow-wrap: anywhere; }
+  .step.ok .step-status { color: var(--ok); }
+  .step.warn .step-status { color: var(--warn); }
+
+  /* ===================== Disclosure ===================== */
+  details { margin-top: var(--s5); }
+  summary {
+    cursor: pointer; font-size: var(--fs-sub); color: var(--text-2); font-weight: 500;
+    list-style: none; display: inline-flex; align-items: center; gap: var(--s1); border-radius: var(--r-sm);
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary svg { transition: transform var(--dur) var(--ease); }
+  details[open] summary svg { transform: rotate(90deg); }
+  summary:hover { color: var(--text); }
+  .code-block {
+    margin: var(--s3) 0 0; padding: var(--s4); background: var(--surface); border-radius: var(--r-sm);
+    font-family: var(--mono); font-size: var(--fs-caption); line-height: 1.6; color: var(--text-2);
+    white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto;
+  }
+
+  /* ===================== Data ===================== */
+  .data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s6); align-items: start; }
+  .facts { display: grid; grid-template-columns: auto 1fr; gap: var(--s3) var(--s5); margin: 0; font-size: var(--fs-sub); }
+  .facts dt { color: var(--text-3); }
+  .facts dd { margin: 0; font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .file-picker { display: flex; flex-direction: column; gap: var(--s3); }
+  .file-row { display: flex; gap: var(--s2); align-items: center; }
+  .file-row .file-name {
+    flex: 1; min-width: 0; height: 44px; display: flex; align-items: center; padding: 0 var(--s4);
+    border: 1px solid var(--line); border-radius: var(--r-sm); color: var(--text-3); font-size: var(--fs-sub);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--bg);
+  }
+  .file-row .file-name.has-file { color: var(--text); }
+  .inline-status { display: flex; align-items: center; gap: var(--s2); font-size: var(--fs-sub); min-height: 22px; }
+  .inline-status.ok { color: var(--ok); }
+  .inline-status.err { color: var(--err); }
+  .inline-status.muted { color: var(--text-3); }
+
+  /* ===================== Logs ===================== */
+  .tabs { display: flex; gap: var(--s1); flex-wrap: wrap; }
+  .tab {
+    height: 36px; padding: 0 var(--s4); border: none; border-radius: var(--r-full); background: transparent;
+    font: inherit; font-size: var(--fs-sub); font-weight: 500; color: var(--text-2); cursor: pointer;
+    transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
+  }
+  .tab:hover { background: var(--surface); color: var(--text); }
+  .tab[aria-selected="true"] { background: var(--text); color: var(--bg); }
+  .tab small { color: inherit; opacity: 0.7; margin-left: 4px; font-weight: 400; }
+
+  footer { padding: var(--s6) 0; border-top: 1px solid var(--line); }
+
+  /* ===================== Responsive ===================== */
+  @media (max-width: 820px) {
+    .stepper { grid-template-columns: 1fr; gap: 0; }
+    .step { padding: 0 0 var(--s4) 36px; min-height: 52px; }
+    .step::before { top: 0; bottom: 0; left: 9px; right: auto; width: 2px; height: auto; }
+    .step:first-child::before { top: 10px; left: 9px; }
+    .step:last-child::before { display: none; }
+    .step-desc, .step-status { display: inline; }
+    .step-desc::after { content: " · "; }
+    .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: var(--s5); }
+    .metric:nth-child(3) { padding-left: 0; border-left: none; }
+    .data-grid { grid-template-columns: 1fr; gap: var(--s5); }
+  }
+  @media (max-width: 600px) {
+    :root { --gutter: 16px; --fs-display: 1.5rem; --fs-metric: 1.625rem; }
+    main { padding-top: var(--s6); }
+    .intro { margin-bottom: var(--s6); }
+    .section { padding: var(--s6) 0; }
+    .surface { padding: var(--s4); }
+    .run { grid-template-columns: 1fr; }
+    .segmented { width: 100%; }
+    .run .btn { width: 100%; }
+    .model-status .meta { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation-duration: 1.5s !important; }
+  }
 </style>
 </head>
 <body>
 
-<div class="topnav">
-  <div class="brand">
-    <div class="brand-mark">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M2 12h4l2-7 4 14 3-10 2 3h5" stroke="#0a0c10" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<header class="header">
+  <div class="container header-inner">
+    <div class="brand">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 12h4l2-7 4 14 3-10 2 3h5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      유가 AIOps
     </div>
-    <div class="brand-text">
-      <div class="title">AIOps · 휘발유</div>
-      <div class="subtitle">드리프트 감지 기반 재학습 파이프라인</div>
+    <div class="model-status" id="model-status" role="status" aria-live="polite">
+      <span class="dot" id="model-dot"></span>
+      <strong id="model-version">모델 확인 중</strong>
+      <span class="meta" id="model-meta"></span>
     </div>
   </div>
-  <div class="nav-right">
-    <span class="pill neutral" id="model-badge">모델 상태 확인 중…</span>
-  </div>
-</div>
+</header>
 
-<div class="page">
-
-  <!-- ================= 데이터 업로드 ================= -->
-  <div class="card">
-    <div class="section-head">
-      <h2>휘발유 데이터 업로드</h2>
-      <p>
-        <code>data/uploads/</code>는 여기서 업로드한 CSV만 쌓이는 곳입니다. 학습(<code>train_and_register.py</code> 등)은
-        항상 가장 최근에 올라온 파일을 사용합니다. <code>data/sample_gasoline_prices.csv</code>는 합성 데이터입니다. 연결 확인용으로 올려보세요
-        (컬럼: date, gasoline_price, crude_oil_price, usd_krw, tax_or_supply_feature · 최소 41행).
-      </p>
-    </div>
-    <div class="upload-row">
-      <input type="file" id="upload-input" accept=".csv" />
-      <button class="btn primary" onclick="uploadFile()">업로드</button>
-    </div>
-    <div id="upload-status" style="margin-top:10px;"></div>
+<main class="container">
+  <div class="intro">
+    <h1 class="t-display">드리프트 감지와 재학습</h1>
+    <p class="t-sub">배치를 보내면 휘발유 가격 예측 오차를 측정합니다. 오차가 임계치를 넘으면 재학습, 배포 게이트, 서빙 교체까지 자동으로 이어집니다.</p>
   </div>
 
-  <!-- ================= 드리프트 시뮬레이션 ================= -->
-  <div class="card">
-    <div class="section-head">
-      <h2>드리프트 시뮬레이션</h2>
-      <p>
-        일별 수익률(log return) 기반 랜덤워크로 정상/드리프트 배치를 만들어 <code>/predict/batch-test</code>로 전송합니다.
-        드리프트 배치를 보내면 아래 파이프라인이 감지 → 재학습 → (게이트 통과 시) 재배포까지 진행됩니다.
-      </p>
+  <!-- ================= 시뮬레이션 (primary) ================= -->
+  <section class="section" aria-labelledby="run-title">
+    <h2 class="visually-hidden" id="run-title">배치 시뮬레이션</h2>
+    <div class="surface">
+      <div class="run">
+        <div class="run-options">
+          <fieldset class="segmented">
+            <legend class="visually-hidden">배치 종류</legend>
+            <input type="radio" name="batch-kind" id="kind-normal" value="normal" checked />
+            <label for="kind-normal">정상 배치</label>
+            <input type="radio" name="batch-kind" id="kind-drift" value="drift" />
+            <label for="kind-drift">드리프트 배치</label>
+          </fieldset>
+          <p class="t-caption" id="kind-help"></p>
+        </div>
+        <button class="btn btn-primary" id="send-btn" type="button">
+          <span class="spinner" aria-hidden="true"></span>
+          <span class="label">배치 전송</span>
+        </button>
+      </div>
     </div>
-    <div class="btn-row">
-      <button class="btn primary" onclick="sendBatch('normal')">정상 배치 전송</button>
-      <button class="btn danger" onclick="sendBatch('drift')">드리프트 배치 전송</button>
+
+    <div class="result" id="result" aria-live="polite">
+      <p class="empty">아직 보낸 배치가 없습니다. 위에서 배치를 전송하면 결과가 여기에 표시됩니다.</p>
     </div>
-    <div id="drift-status" style="margin-top:14px;"></div>
-    <div id="drift-result" class="result-box"></div>
-  </div>
+  </section>
 
   <!-- ================= 파이프라인 ================= -->
-  <div class="card">
-    <div class="section-head-row">
-      <div class="section-head">
-        <h2>드리프트 감지 기반 재학습 파이프라인</h2>
-        <p>위에서 배치를 보내면, 그 요청이 실제로 거쳐간 단계를 아래에 표시합니다 (자동 스케줄러는 없고, 수동 트리거 방식입니다).</p>
+  <section class="section" aria-labelledby="pipe-title">
+    <div class="section-head">
+      <div>
+        <h2 class="t-title" id="pipe-title">재학습 파이프라인</h2>
+        <p class="t-sub">마지막 배치가 거쳐 간 단계입니다.</p>
       </div>
-      <div class="pipeline-meta">
-        <span class="pill neutral" id="pipeline-run-badge">아직 실행 안 함</span>
+      <span class="t-caption" id="pipeline-meta">아직 실행 안 함</span>
+    </div>
+    <ol class="stepper" id="stepper"></ol>
+  </section>
+
+  <!-- ================= 데이터 ================= -->
+  <section class="section" aria-labelledby="data-title">
+    <div class="section-head">
+      <div>
+        <h2 class="t-title" id="data-title">학습 데이터</h2>
+        <p class="t-sub">학습은 가장 최근에 업로드한 CSV를 사용합니다.</p>
       </div>
     </div>
-    <div class="pipeline-track" id="pipeline-track"></div>
-  </div>
-
-  <!-- ================= 재학습 로그 ================= -->
-  <div class="card">
-    <div class="section-head-row">
-      <div class="section-head">
-        <h2>재학습 로그</h2>
-        <p>
-          드리프트 감지·재학습 트리거는 <code>logs/aiops.log</code>에 그대로 기록됩니다.
-          <code>[WARN] drift detected</code> → <code>[INFO] retrain triggered</code> →
-          <code>[OK] new_rmse=... promoted</code> 순서로 남는지 아래에서 직접 열어 확인하세요.
+    <div class="data-grid">
+      <div>
+        <h3 class="t-caption" style="margin-bottom: var(--s3);">현재 데이터</h3>
+        <div id="data-status"><p class="t-sub">불러오는 중…</p></div>
+      </div>
+      <div class="file-picker">
+        <h3 class="t-caption">새 CSV 업로드</h3>
+        <input type="file" id="upload-input" accept=".csv,text/csv" class="visually-hidden" />
+        <div class="file-row">
+          <label for="upload-input" class="file-name" id="file-name">선택된 파일 없음</label>
+          <button class="btn btn-secondary" type="button" id="pick-btn">파일 선택</button>
+        </div>
+        <button class="btn btn-secondary btn-block" type="button" id="upload-btn" disabled>
+          <span class="spinner" aria-hidden="true"></span>
+          <span class="label">업로드</span>
+        </button>
+        <div class="inline-status muted" id="upload-status" aria-live="polite"></div>
+        <p class="t-caption">
+          필수 컬럼 <code>date, gasoline_price, crude_oil_price, usd_krw, tax_or_supply_feature</code> · 하루 간격 · 최소 41행.
+          연결 확인용 합성 데이터: <code>data/sample_gasoline_prices.csv</code>
         </p>
       </div>
     </div>
-    <div class="btn-row" id="log-file-list"></div>
-    <div id="log-content" class="result-box"></div>
-  </div>
+  </section>
 
-</div>
+  <!-- ================= 로그 ================= -->
+  <section class="section" aria-labelledby="log-title">
+    <div class="section-head">
+      <div>
+        <h2 class="t-title" id="log-title">운영 로그</h2>
+        <p class="t-sub"><code>[WARN] drift detected</code> → <code>[INFO] retrain triggered</code> → <code>[OK] promoted</code> 순서로 기록됩니다.</p>
+      </div>
+      <button class="btn btn-ghost" type="button" id="log-refresh">새로고침</button>
+    </div>
+    <div class="tabs" role="tablist" aria-label="로그 파일" id="log-tabs"></div>
+    <div id="log-panel" role="tabpanel"></div>
+  </section>
+</main>
 
-<footer>휘발유 AIOps 실습 · 드리프트 감지 → 재학습 파이프라인 (serving_app/static/index.html)</footer>
+<footer>
+  <div class="container t-caption">유가 AIOps · 수동 트리거 시연용 대시보드 (자동 스케줄러 없음)</div>
+</footer>
 
 <script>
-/* ===================== 전역 상태 ===================== */
+/* ===================== 상수 ===================== */
 // 서버(data/features.py, monitoring/drift_detector.py)와 동일한 값 (상수만 복제)
 const SEQ_LEN = 20;
 const WINDOW_SIZE = 21;
 const RMSE_THRESHOLD = 10.0;
 
-let lastPipelineRun = null; // { driftCheck, clientRmse, ts }
-
 const NORMAL_SIGMA = 0.001;
 const DRIFT_SIGMA = NORMAL_SIGMA * 10;
 const DEFAULT_BASE_PRICE = 1700.0;
+const KIND_HELP = {
+  normal: `일 변동 ${NORMAL_SIGMA * 100}% 랜덤워크 ${SEQ_LEN + WINDOW_SIZE}행 · 오차가 임계치 안에 머무는지 확인`,
+  drift: `일 변동 ${DRIFT_SIGMA * 100}% 랜덤워크 ${SEQ_LEN + WINDOW_SIZE}행 · 재학습이 걸리면 수십 초 걸릴 수 있음`,
+};
 const PIPELINE_STAGES = [
   { key: "collect", title: "데이터 수집", desc: "요청 수신" },
-  { key: "monitor", title: "데이터 모니터링", desc: "예측 기록 누적" },
+  { key: "monitor", title: "모니터링", desc: "예측 기록 누적" },
   { key: "detect", title: "드리프트 감지", desc: "RMSE vs 임계치" },
   { key: "trigger", title: "재학습 트리거", desc: "조건 충족 시 시작" },
   { key: "train", title: "모델 학습", desc: "fine-tuning" },
@@ -218,6 +444,12 @@ const PIPELINE_STAGES = [
   { key: "deploy", title: "배포", desc: "Production 승격" },
   { key: "reload", title: "서빙 교체", desc: "reload_model" },
 ];
+const ICON_CHECK = `<svg class="i-check" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 6.2l2.2 2.2 4.8-4.9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const ICON_ALERT = `<svg class="i-alert" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M6 3v3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="6" cy="8.9" r="1" fill="currentColor"/></svg>`;
+const ICON_CHEVRON = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+let lastPipelineRun = null; // { driftCheck, ts }
+const $ = (id) => document.getElementById(id);
 
 /* ===================== 유틸 ===================== */
 function randn() {
@@ -242,19 +474,20 @@ function rmseOf(actual, predicted) {
 function relTime(ts) {
   if (!ts) return "-";
   const diff = Math.max(0, Date.now() / 1000 - ts);
-  if (diff < 60) return `${Math.floor(diff)}초 전`;
+  if (diff < 60) return "방금";
   if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
   return `${Math.floor(diff / 86400)}일 전`;
+}
+function fmt(n, digits = 2) {
+  return typeof n === "number" && isFinite(n) ? n.toLocaleString("ko-KR", { maximumFractionDigits: digits, minimumFractionDigits: digits }) : "–";
 }
 async function getJSON(path) {
   const res = await fetch(path);
   const data = await res.json().catch(() => null);
   return { ok: res.ok, status: res.status, data };
 }
-// 서버가 500 등을 일반 텍스트("Internal Server Error")로 응답할 수도 있어
-// (예: model_loader.py의 _load_from_mlflow TODO가 아직 NotImplementedError를 던지는 경우),
-// res.json()을 바로 쓰지 않고 텍스트로 먼저 받아 파싱을 시도한다.
+// 서버가 500 등을 일반 텍스트로 응답할 수도 있어 텍스트로 먼저 받아 파싱을 시도한다.
 async function safeJson(res) {
   const text = await res.text();
   try { return JSON.parse(text); } catch (e) { return { __raw: text || "(응답 없음)" }; }
@@ -264,174 +497,275 @@ function esc(text) {
   div.textContent = String(text);
   return div.innerHTML;
 }
-function pill(level, text) {
-  return `<span class="pill ${level}"><span class="dot"></span>${esc(text)}</span>`;
+function setBusy(btn, busy, label) {
+  btn.disabled = busy;
+  btn.setAttribute("aria-busy", busy ? "true" : "false");
+  if (label) btn.querySelector(".label").textContent = label;
 }
-function showResult(el, obj, isError = false) {
-  el.classList.add("show");
-  el.style.borderColor = isError ? "var(--err)" : "var(--border)";
-  el.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+function rawDetails(obj) {
+  const text = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+  return `<details><summary>${ICON_CHEVRON}응답 원본 보기</summary><pre class="code-block">${esc(text)}</pre></details>`;
 }
 
 /* ===================== 모델 상태 ===================== */
 async function loadHealth() {
-  const badge = document.getElementById("model-badge");
   const { ok, data } = await getJSON("/health").catch(() => ({ ok: false }));
-  if (!ok || !data) { badge.className = "pill err"; badge.textContent = "서버 응답 없음"; return; }
-  const version = data.model_loaded ? data.model_version : "미로드";
-  badge.className = data.model_loaded ? "pill ok" : "pill neutral";
-  badge.textContent = `모델 ${version} · ${data.model_source} · ${data.loading_mode}`;
-}
-
-/* ===================== 데이터 업로드 ===================== */
-async function uploadFile() {
-  const input = document.getElementById("upload-input");
-  const statusEl = document.getElementById("upload-status");
-  if (!input.files.length) {
-    statusEl.innerHTML = `<span class="pill warn"><span class="dot"></span>파일을 먼저 선택하세요</span>`;
+  if (!ok || !data) {
+    $("model-dot").className = "dot err";
+    $("model-version").textContent = "서버 응답 없음";
+    $("model-meta").textContent = "";
     return;
   }
+  $("model-dot").className = data.model_loaded ? "dot ok" : "dot";
+  $("model-version").textContent = data.model_loaded ? `모델 ${data.model_version}` : "모델 미로드";
+  $("model-meta").textContent = `${data.model_source} · ${data.loading_mode}`;
+}
+
+/* ===================== 데이터 ===================== */
+async function loadDataStatus() {
+  const box = $("data-status");
+  const { ok, data } = await getJSON("/data/status").catch(() => ({ ok: false }));
+  if (!ok || !data) { box.innerHTML = `<p class="t-sub">상태를 불러오지 못했습니다.</p>`; return; }
+  if (!data.exists) { box.innerHTML = `<p class="t-sub">업로드된 데이터가 없습니다. 오른쪽에서 CSV를 올려 주세요.</p>`; return; }
+  box.innerHTML = `
+    <dl class="facts">
+      <dt>기간</dt><dd>${esc(data.start_date)} – ${esc(data.end_date)}</dd>
+      <dt>행 수</dt><dd>${esc(data.rows.toLocaleString("ko-KR"))}행</dd>
+      <dt>가격 범위</dt><dd>${fmt(data.min_price, 0)} – ${fmt(data.max_price, 0)}원/L</dd>
+      <dt>파일</dt><dd class="t-caption">${esc(data.filename)}</dd>
+    </dl>`;
+}
+
+function setUploadStatus(level, text) {
+  const el = $("upload-status");
+  el.className = `inline-status ${level}`;
+  el.innerHTML = text ? `<span class="dot ${level === "muted" ? "" : level}"></span>${esc(text)}` : "";
+}
+
+async function uploadFile() {
+  const input = $("upload-input");
+  const btn = $("upload-btn");
+  if (!input.files.length) { setUploadStatus("err", "파일을 먼저 선택하세요"); return; }
   const form = new FormData();
   form.append("file", input.files[0]);
-  statusEl.innerHTML = `<span class="pill neutral"><span class="dot"></span>업로드 중…</span>`;
+  setBusy(btn, true, "업로드 중…");
+  setUploadStatus("muted", "");
   try {
     const res = await fetch("/data/upload", { method: "POST", body: form });
     const data = await safeJson(res);
-    if (!res.ok) {
-      statusEl.innerHTML = `<span class="pill err"><span class="dot"></span>${data.detail || "업로드 실패"}</span>`;
-      return;
-    }
-    statusEl.innerHTML = `<span class="pill ok"><span class="dot"></span>업로드 완료: ${data.filename} (${data.rows}행)</span>`;
+    if (!res.ok) { setUploadStatus("err", data.detail || "업로드 실패"); return; }
+    setUploadStatus("ok", `업로드 완료 · ${data.rows}행`);
+    input.value = "";
+    onFileChange();
+    loadDataStatus();
   } catch (e) {
-    statusEl.innerHTML = `<span class="pill err"><span class="dot"></span>요청 실패: ${e.message}</span>`;
+    setUploadStatus("err", `요청 실패: ${e.message}`);
+  } finally {
+    setBusy($("upload-btn"), false, "업로드");
+    $("upload-btn").disabled = !input.files.length;
   }
 }
 
-/* ===================== 재학습 로그 ===================== */
+function onFileChange() {
+  const input = $("upload-input");
+  const nameEl = $("file-name");
+  const file = input.files[0];
+  nameEl.textContent = file ? file.name : "선택된 파일 없음";
+  nameEl.classList.toggle("has-file", !!file);
+  $("upload-btn").disabled = !file;
+  $("upload-btn").classList.toggle("btn-primary", !!file);
+  $("upload-btn").classList.toggle("btn-secondary", !file);
+  if (file) setUploadStatus("muted", "");
+}
+
+/* ===================== 로그 ===================== */
+let activeLog = null;
 async function loadLogFiles() {
-  const { ok, data } = await getJSON("/logs");
-  const wrap = document.getElementById("log-file-list");
+  const tabs = $("log-tabs");
+  const panel = $("log-panel");
+  const { ok, data } = await getJSON("/logs").catch(() => ({ ok: false }));
   if (!ok || !data || !data.length) {
-    wrap.innerHTML = `<span class="pill neutral">아직 로그가 없습니다 - 드리프트 배치를 보내면 logs/aiops.log가 생깁니다</span>`;
+    tabs.innerHTML = "";
+    panel.innerHTML = `<p class="empty">아직 로그가 없습니다. 드리프트 배치를 보내면 <code>logs/aiops.log</code>가 생깁니다.</p>`;
     return;
   }
-  wrap.innerHTML = data.map((f) =>
-    `<button class="btn secondary" onclick="openLogFile('${f.name}')">${f.name} (${f.size}B)</button>`
-  ).join("");
+  if (!data.some((f) => f.name === activeLog)) activeLog = data[0].name;
+  tabs.innerHTML = data.map((f) => `
+    <button class="tab" type="button" role="tab" data-name="${esc(f.name)}"
+      aria-selected="${f.name === activeLog}" tabindex="${f.name === activeLog ? 0 : -1}">
+      ${esc(f.name)}<small>${formatSize(f.size)}</small>
+    </button>`).join("");
+  openLogFile(activeLog);
+}
+function formatSize(bytes) {
+  return bytes < 1024 ? `${bytes}B` : `${(bytes / 1024).toFixed(1)}KB`;
 }
 async function openLogFile(name) {
-  const box = document.getElementById("log-content");
-  const { ok, data } = await getJSON(`/logs/${encodeURIComponent(name)}`);
-  if (!ok || !data) { showResult(box, "불러오기 실패", true); return; }
-  showResult(box, data.content || "(비어 있음)");
+  activeLog = name;
+  $("log-tabs").querySelectorAll(".tab").forEach((t) => {
+    const on = t.dataset.name === name;
+    t.setAttribute("aria-selected", on);
+    t.tabIndex = on ? 0 : -1;
+  });
+  const panel = $("log-panel");
+  const { ok, data } = await getJSON(`/logs/${encodeURIComponent(name)}`).catch(() => ({ ok: false }));
+  if (!ok || !data) { panel.innerHTML = `<p class="empty">로그를 불러오지 못했습니다.</p>`; return; }
+  panel.innerHTML = data.content
+    ? `<pre class="code-block">${esc(data.content)}</pre>`
+    : `<p class="empty">비어 있는 파일입니다.</p>`;
+  const pre = panel.querySelector("pre");
+  if (pre) pre.scrollTop = pre.scrollHeight; // 최신 로그가 보이도록
 }
 
-/* ===================== 파이프라인 시각화 ===================== */
+/* ===================== 파이프라인 ===================== */
+function pipelineStates(check) {
+  const triggered = check.status === "retrain_triggered";
+  if (triggered && check.promoted === true) {
+    return ["ok", "ok", "warn", "ok", "ok", "ok", "ok", check.reload?.reloaded ? "ok" : "warn"];
+  }
+  if (triggered && check.promoted === false) return ["ok", "ok", "warn", "ok", "ok", "warn", "idle", "idle"];
+  if (triggered) return ["ok", "ok", "warn", "idle", "idle", "idle", "idle", "idle"];
+  return ["ok", "ok", "ok", "idle", "idle", "idle", "idle", "idle"];
+}
 function renderPipeline() {
-  const track = document.getElementById("pipeline-track");
-  const badge = document.getElementById("pipeline-run-badge");
-
-  if (!lastPipelineRun) {
-    badge.className = "pill neutral"; badge.textContent = "아직 실행 안 함";
-    track.innerHTML = PIPELINE_STAGES.map((s, i) => stageHtml(s, i, "idle", "대기 중")).join("");
-    return;
-  }
-
-  const { driftCheck, ts } = lastPipelineRun;
-  badge.className = "pill neutral";
-  badge.textContent = `마지막 실행 ${relTime(ts)}`;
-
-  const serverStatus = driftCheck.status; // "ok" | "retrain_triggered"
-  const promoted = driftCheck.promoted;
-
-  const reload = driftCheck.reload; // promoted일 때만 서버가 채운다 (#14)
-
-  let states; // 8개 단계 상태: idle | ok | warn
-  if (serverStatus === "retrain_triggered" && promoted === true) {
-    states = ["ok", "ok", "warn", "ok", "ok", "ok", "ok", reload?.reloaded ? "ok" : "warn"];
-  } else if (serverStatus === "retrain_triggered" && promoted === false) {
-    states = ["ok", "ok", "warn", "ok", "ok", "warn", "idle", "idle"];
-  } else if (serverStatus === "retrain_triggered") {
-    states = ["ok", "ok", "warn", "idle", "idle", "idle", "idle", "idle"];
+  const meta = $("pipeline-meta");
+  let states = PIPELINE_STAGES.map(() => "idle");
+  let labels = PIPELINE_STAGES.map(() => "대기");
+  if (lastPipelineRun) {
+    const check = lastPipelineRun.driftCheck;
+    states = pipelineStates(check);
+    const text = { ok: "완료", warn: "감지됨", idle: "대기" };
+    labels = states.map((s) => text[s]);
+    if (check.promoted === false) labels[5] = "게이트 미통과";
+    if (check.reload) labels[7] = check.reload.reloaded ? check.reload.version : "교체 실패";
+    meta.textContent = `마지막 실행 ${relTime(lastPipelineRun.ts)}`;
   } else {
-    states = ["ok", "ok", "ok", "idle", "idle", "idle", "idle", "idle"];
+    meta.textContent = "아직 실행 안 함";
   }
-  const statusText = { ok: "완료", warn: "감지됨", idle: "대기 중" };
-  const labels = states.map((st) => statusText[st]);
-  if (reload) labels[7] = reload.reloaded ? reload.version : "교체 실패";
-
-  track.innerHTML = PIPELINE_STAGES.map((s, i) => stageHtml(s, i, states[i], esc(labels[i]))).join("");
-}
-function stageHtml(stage, idx, state, statusLabel) {
-  return `
-    <div class="pipe-stage ${state}">
-      <div class="pipe-title">${stage.title}</div>
-      <div class="pipe-desc">${stage.desc}</div>
-      <div class="pipe-status">${statusLabel}</div>
-    </div>`;
+  $("stepper").innerHTML = PIPELINE_STAGES.map((s, i) => `
+    <li class="step ${states[i]}">
+      <span class="marker">${ICON_CHECK}${ICON_ALERT}</span>
+      <div class="step-title">${s.title}</div>
+      <div class="step-desc">${s.desc}</div>
+      <div class="step-status">${esc(labels[i])}</div>
+    </li>`).join("");
 }
 
-/* ===================== 드리프트 배치 전송 ===================== */
-async function sendBatch(kind) {
-  const statusEl = document.getElementById("drift-status");
-  const resultBox = document.getElementById("drift-result");
+/* ===================== 배치 전송 ===================== */
+function selectedKind() {
+  return document.querySelector('input[name="batch-kind"]:checked').value;
+}
+function summarize(check) {
+  const triggered = check.status === "retrain_triggered";
+  if (triggered && check.promoted && check.reload?.reloaded) {
+    return { level: "ok", title: "재학습 후 새 모델로 교체했습니다", sub: `${check.reload.version} 버전이 지금 서빙 중입니다.` };
+  }
+  if (triggered && check.promoted) {
+    return { level: "warn", title: "새 모델이 승격됐지만 서빙 교체에 실패했습니다",
+      sub: `기존 모델(${check.reload?.version ?? "알 수 없음"})을 계속 사용합니다. 원인: ${check.reload?.error ?? "알 수 없음"}` };
+  }
+  if (triggered && check.promoted === false) {
+    return { level: "warn", title: "드리프트를 감지해 재학습했지만 게이트를 통과하지 못했습니다", sub: "기존 모델을 그대로 유지합니다." };
+  }
+  if (triggered) return { level: "warn", title: "드리프트를 감지해 재학습을 시작했습니다", sub: "" };
+  return { level: "ok", title: "정상입니다", sub: `예측 오차가 임계치(${RMSE_THRESHOLD}원/L) 안에 있습니다.` };
+}
+
+function renderResult(data, clientRmse) {
+  const check = data.drift_check || {};
+  const s = summarize(check);
+  const version = check.reload?.reloaded ? check.reload.version : ($("model-version").textContent.replace(/^모델 /, "") || "–");
+  const metrics = [
+    `<div class="metric"><dt>예측 오차 RMSE</dt><dd>${fmt(clientRmse)}<small>원/L</small></dd></div>`,
+    `<div class="metric"><dt>임계치</dt><dd>${fmt(RMSE_THRESHOLD, 0)}<small>원/L</small></dd></div>`,
+  ];
+  // 재학습 결과 RMSE는 재학습이 일어났을 때만 서버가 준다
+  if (typeof check.rmse === "number") metrics.push(`<div class="metric"><dt>재학습 모델 RMSE</dt><dd>${fmt(check.rmse)}<small>원/L</small></dd></div>`);
+  metrics.push(`<div class="metric"><dt>서빙 모델</dt><dd class="is-text">${esc(version)}</dd></div>`);
+  $("result").innerHTML = `
+    <div class="result-status">
+      <span class="dot ${s.level}"></span>
+      <div>
+        <p class="t-title">${esc(s.title)}</p>
+        ${s.sub ? `<p class="t-sub">${esc(s.sub)}</p>` : ""}
+      </div>
+    </div>
+    <dl class="metrics" style="--cols: ${metrics.length}">${metrics.join("")}</dl>
+    ${rawDetails(data)}`;
+}
+
+function renderError(status, data) {
+  // 501: AIOps 판정 미구현(작업 중), 그 외(503 모델 미준비 등): 오류
+  const isPending = status === 501;
+  const title = isPending ? "AIOps 판정이 아직 구현되지 않았습니다" : status === 503 ? "모델이 준비되지 않았습니다" : `요청이 실패했습니다 (${status})`;
+  const detail = data.detail || data.__raw || "model_loader.py 또는 predict.py를 확인하세요";
+  $("result").innerHTML = `
+    <div class="notice ${isPending ? "warn" : "err"}" role="alert">
+      <span class="dot ${isPending ? "warn" : "err"}"></span>
+      <div><strong>${esc(title)}</strong>${esc(typeof detail === "string" ? detail : JSON.stringify(detail))}</div>
+    </div>
+    ${rawDetails({ status, detail: data })}`;
+}
+
+async function sendBatch() {
+  const kind = selectedKind();
+  const btn = $("send-btn");
   const n = SEQ_LEN + WINDOW_SIZE;
-  const sigma = kind === "drift" ? DRIFT_SIGMA : NORMAL_SIGMA;
-  const prices = randomWalk(n, DEFAULT_BASE_PRICE, sigma);
-
-  statusEl.innerHTML = `<span class="pill warn"><span class="dot"></span>전송 중… (fine-tuning이 걸리면 수십 초 걸릴 수 있습니다)</span>`;
-
+  const prices = randomWalk(n, DEFAULT_BASE_PRICE, kind === "drift" ? DRIFT_SIGMA : NORMAL_SIGMA);
+  setBusy(btn, true, "전송 중…");
   try {
-    const res = await fetch("/predict/batch-test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows: prices.map(gasoline_price => ({gasoline_price, crude_oil_price: 75, usd_krw: 1350, tax_or_supply_feature: 0})) }) });
+    const res = await fetch("/predict/batch-test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows: prices.map((gasoline_price) => ({ gasoline_price, crude_oil_price: 75, usd_krw: 1350, tax_or_supply_feature: 0 })) }),
+    });
     const data = await safeJson(res);
-    if (!res.ok) {
-      // 501: AIOps 판정 미구현, 503: 모델 미준비 - 서버 detail을 그대로 보여준다.
-      const reason = data.detail
-        ? `${res.status} · ${data.detail}`
-        : `${res.status} · 서버 오류 - model_loader.py 또는 predict.py를 확인하세요`;
-      statusEl.innerHTML = pill(res.status === 501 ? "warn" : "err", reason);
-      showResult(resultBox, { status: res.status, detail: data }, true);
-      return;
-    }
-    const actual = [];
-    for (let i = 0; i < prices.length - SEQ_LEN; i++) actual.push(prices[i + SEQ_LEN]);
+    if (!res.ok) { renderError(res.status, data); return; }
+    const actual = prices.slice(SEQ_LEN);
     const clientRmse = rmseOf(actual, data.predictions || []);
-
-    lastPipelineRun = { driftCheck: data.drift_check || {}, clientRmse, ts: Date.now() / 1000 };
+    lastPipelineRun = { driftCheck: data.drift_check || {}, ts: Date.now() / 1000 };
+    await loadHealth();
+    renderResult(data, clientRmse);
     renderPipeline();
     loadLogFiles();
-
-    const check = data.drift_check || {};
-    const rmse = check.rmse?.toFixed?.(2) ?? check.rmse;
-    let level = "ok", label = "정상 (드리프트 없음)";
-    if (check.status === "retrain_triggered" && check.promoted && check.reload?.reloaded) {
-      level = "ok"; label = `재학습 완료 · ${check.reload.version}로 교체 (rmse=${rmse})`;
-    } else if (check.status === "retrain_triggered" && check.promoted) {
-      level = "warn"; label = `승격됐지만 서빙 교체 실패 · 기존 ${check.reload?.version ?? "모델"} 유지 (${check.reload?.error ?? "원인 미상"})`;
-    } else if (check.status === "retrain_triggered" && check.promoted === false) {
-      level = "warn"; label = `드리프트 감지 · 재학습했지만 게이트 미통과 (rmse=${rmse})`;
-    } else if (check.status === "retrain_triggered") {
-      level = "warn"; label = "드리프트 감지 · 재학습 트리거됨";
-    }
-    statusEl.innerHTML = `
-      ${pill(level, label)}
-      <span class="pill neutral" style="margin-left:6px;">클라이언트 계산 RMSE (원/L): ${clientRmse != null ? clientRmse.toFixed(2) : "-"}</span>`;
-    showResult(resultBox, data, false);
   } catch (e) {
-    statusEl.innerHTML = `<span class="pill err"><span class="dot"></span>연결 실패</span>`;
-    showResult(resultBox, "요청 실패: " + e.message, true);
+    $("result").innerHTML = `
+      <div class="notice err" role="alert"><span class="dot err"></span>
+        <div><strong>서버에 연결하지 못했습니다</strong>${esc(e.message)}</div></div>`;
   } finally {
     loadHealth(); // 실패해도 첫 요청에서 모델이 로드됐을 수 있다 (lazy)
+    setBusy(btn, false, "배치 전송");
   }
 }
 
-/* ===================== 초기화 ===================== */
-async function init() {
-  renderPipeline();
-  loadLogFiles();
-  loadHealth();
-}
-init();
+/* ===================== 이벤트·초기화 ===================== */
+function updateKindHelp() { $("kind-help").textContent = KIND_HELP[selectedKind()]; }
+document.querySelectorAll('input[name="batch-kind"]').forEach((r) => r.addEventListener("change", updateKindHelp));
+$("send-btn").addEventListener("click", sendBatch);
+$("pick-btn").addEventListener("click", () => $("upload-input").click());
+$("upload-input").addEventListener("change", onFileChange);
+$("upload-btn").addEventListener("click", uploadFile);
+$("log-refresh").addEventListener("click", loadLogFiles);
+$("log-tabs").addEventListener("click", (e) => {
+  const tab = e.target.closest(".tab");
+  if (tab) openLogFile(tab.dataset.name);
+});
+$("log-tabs").addEventListener("keydown", (e) => { // 탭 좌우 화살표 이동
+  if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+  const tabs = [...$("log-tabs").querySelectorAll(".tab")];
+  const i = tabs.indexOf(document.activeElement);
+  if (i < 0) return;
+  const next = tabs[(i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+  next.focus();
+  openLogFile(next.dataset.name);
+});
+setInterval(() => { if (lastPipelineRun) renderPipeline(); }, 30000);
+
+updateKindHelp();
+renderPipeline();
+loadHealth();
+loadDataStatus();
+loadLogFiles();
 </script>
 </body>
 </html>
