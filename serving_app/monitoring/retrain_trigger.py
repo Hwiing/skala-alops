@@ -18,10 +18,10 @@ AIOps 3/3 (#17): 드리프트 감지 → 로그·운영자 알림 → fine-tunin
        게이트 탈락·예외는 승격이 없으므로 기존 Production이 그대로 서빙된다.
 
 반복 재학습 방지
-    - 같은 판정(모델 버전 + 판정 기간)으로 학습을 끝낸 결정(promoted·gate_failed)은 재사용한다.
+    - 같은 판정(모델 버전 + 판정 기간)으로는 한 번만 재학습하고, 다시 들어오면 그때 결과를 재사용한다.
+      재사용은 확정 결과(promoted·gate_failed)만. 데이터 부족·예외 등 일시 실패는 쿨다운 뒤 다시 시도한다.
+      결과 기록까지 lock 안에서 끝내므로 동시에 들어온 같은 판정도 한 번만 학습한다.
       서빙이 교체에 실패해 기록을 유지한 경우, 재사용된 promoted 결과로 서빙이 교체를 다시 시도할 수 있다.
-      학습 예외·데이터 부족·Production 없음은 재사용하지 않는다(쿨다운 뒤 같은 판정도 다시 시도).
-    - 캐시 확인·학습·결과 기록은 같은 잠금 안에서 처리한다(같은 판정의 동시 요청이 두 번 학습하지 않음).
     - 승격하지 못한 재학습 뒤에는 RETRAIN_COOLDOWN_SECONDS 동안 새 재학습을 막는다.
     - 재학습이 이미 돌고 있으면 기다리지 않고 바로 돌려준다 (fine-tuning은 수십 초).
     쿨다운·진행 중은 재학습을 하지 않은 상태라 retrain_failed + 이유로 알린다 (정상 ok로 숨기지 않음).
@@ -30,11 +30,14 @@ AIOps 3/3 (#17): 드리프트 감지 → 로그·운영자 알림 → fine-tunin
     [WARN] drift detected → [INFO] retrain triggered → [OK] | [GATE_FAILED] | [ERROR]
 """
 
+import hashlib
+import json
 import logging
 import os
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 
 from data.contracts import FINETUNE_MIN_ROWS, MODEL_NAME
 from serving_app.monitoring import notifier as operator_notifier
@@ -50,15 +53,41 @@ RETRAIN_COOLDOWN_SECONDS = float(os.getenv("RETRAIN_COOLDOWN_SECONDS", "600"))
 notifier: Callable[[dict], object] | None = operator_notifier.from_env().notify
 
 _retrain_lock = threading.Lock()
-_results: dict[tuple, dict] = {}  # (모델 버전, 판정 시작일, 종료일) → 그 판정의 재학습 결과
+_results: dict[tuple, dict] = {}  # (모델 버전, 판정 시작일, 종료일) → 그 판정의 확정 재학습 결과
+FINAL_STATUSES = ("promoted", "gate_failed")  # 다시 돌려도 같은 결과 → 재사용. 나머지는 일시 실패
 _last_failure_at: float | None = None  # 마지막으로 승격하지 못한 재학습의 종료 시각
 
 
 def _load_recent_rows() -> list[dict]:
-    """저장된 전체 경유 데이터에서 fine-tuning에 필요한 최근 행만 자른다."""
+    """검증된 627행 이상 후보 중 마지막 날짜가 가장 최근인 파일을 선택한다."""
+    from data import storage
     from data.diesel_features import load_diesel_rows
 
-    return load_diesel_rows(DATA_CSV)[-FINETUNE_MIN_ROWS:]
+    paths = [Path(DATA_CSV), *sorted(Path(storage.UPLOAD_DIR).glob("*.csv"))]
+    candidates = []
+    for priority, path in enumerate(paths):
+        try:
+            rows = load_diesel_rows(str(path))
+            if len(rows) < FINETUNE_MIN_ROWS:
+                raise ValueError(f"insufficient_data: {len(rows)}/{FINETUNE_MIN_ROWS}행")
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            logger.info(f"[INFO] retrain data excluded: {path} ({exc})")
+            continue
+        candidates.append((rows[-1]["date"], -priority, path, rows))
+    if not candidates:
+        raise ValueError("insufficient_data: 설정 CSV·업로드에 유효한 627행 데이터가 없습니다")
+    _, _, path, rows = max(candidates, key=lambda candidate: candidate[:2])
+    recent = rows[-FINETUNE_MIN_ROWS:]
+    logger.info(
+        f"[INFO] retrain data selected: {path} rows={len(rows)} "
+        f"period={recent[0]['date']}~{recent[-1]['date']} sha256={_data_key(recent)}"
+    )
+    return recent
+
+
+def _data_key(rows: list[dict]) -> str:
+    """학습 입력 지문. 새 데이터나 정정된 값은 같은 판정 기간이라도 다시 검증한다."""
+    return hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest()
 
 
 def _fine_tune(rows: list[dict]) -> dict:
@@ -113,6 +142,21 @@ def _not_retrained(detection: dict, reason: str) -> dict:
     }
 
 
+def _finish(public: dict, detection: dict, key: tuple | None) -> dict:
+    """재학습을 시도한 결과의 공통 처리: 확정 결과만 기록(중복 재사용), 실패면 쿨다운 시작, 알림.
+
+    데이터 부족·학습 예외·Production 없음은 고쳐지면 다시 시도해야 하므로 기록하지 않고
+    쿨다운만 건다 → 쿨다운이 지나면 같은 판정도 재학습한다.
+    """
+    global _last_failure_at
+    if public.get("status") in FINAL_STATUSES:
+        _results[key] = public
+    if not public.get("promoted"):
+        _last_failure_at = time.monotonic()
+    _notify(public, detection)
+    return public
+
+
 def check_and_trigger(recent_predictions: list[dict]) -> dict:
     """batch_test가 호출. 반환은 DriftCheck 계약 (서빙은 promoted·version으로 교체를 판단)."""
     detection = evaluate(recent_predictions)
@@ -135,7 +179,6 @@ def check_and_trigger(recent_predictions: list[dict]) -> dict:
     if status == "ok":
         return {"status": "ok", **_detection_fields(detection)}
 
-    key = (detection["model_version"], *detection["period"])
     period = "~".join(detection["period"])
     logger.warning(
         f"[WARN] drift detected (week1_rmse={detection['week1_rmse']:.2f} > "
@@ -143,8 +186,40 @@ def check_and_trigger(recent_predictions: list[dict]) -> dict:
         f"model={detection['model_version'] or 'unknown'})"
     )
 
+    if not _retrain_lock.acquire(blocking=False):
+        logger.info("[INFO] retrain skipped - another retrain is in progress")
+        return _not_retrained(detection, "다른 재학습이 진행 중, 기존 모델 유지")
+    try:
+        try:
+            rows = _load_recent_rows()
+        except Exception as exc:
+            skipped = _skip_reason(None, detection, period)
+            if skipped is not None:
+                return skipped
+            return _finish(_data_failure(detection, exc), detection, None)
+        key = (detection["model_version"], *detection["period"], _data_key(rows))
+        # 결과와 데이터 지문을 lock 안에서 확인하고 기록한다.
+        skipped = _skip_reason(key, detection, period)
+        if skipped is not None:
+            return skipped
+        # 결과 기록(_finish)까지 lock 안에서 해야 같은 판정이 두 번 학습되지 않는다
+        return _finish(_retrain(detection, rows), detection, key)
+    finally:
+        _retrain_lock.release()
+
+
+def _skip_reason(key: tuple | None, detection: dict, period: str) -> dict | None:
+    """같은 판정의 확정 결과가 있으면 재사용, 직전 실패 후 쿨다운 중이면 대기. 아니면 None."""
     if key in _results:
-        return _reuse(key, period)
+        logger.info(f"[INFO] retrain skipped - already attempted for period={period}")
+        previous = _results[key]
+        return {
+            **previous,
+            "reasons": [
+                *previous.get("reasons", []),
+                "같은 판정은 재학습하지 않음(이전 결과 재사용)",
+            ],
+        }
     if _last_failure_at is not None:
         remaining = RETRAIN_COOLDOWN_SECONDS - (time.monotonic() - _last_failure_at)
         if remaining > 0:
@@ -153,68 +228,29 @@ def check_and_trigger(recent_predictions: list[dict]) -> dict:
                 detection,
                 f"재학습 대기: 직전 실패 후 쿨다운 {remaining:.0f}초 남음, 기존 모델 유지",
             )
-    if not _retrain_lock.acquire(blocking=False):
-        logger.info("[INFO] retrain skipped - another retrain is in progress")
-        return _not_retrained(detection, "다른 재학습이 진행 중, 기존 모델 유지")
-    # 결과 기록(_record)까지 잠금 안에서 끝낸다. 잠금을 풀고 기록하면 그 사이에 같은 판정이 들어와
-    # 같은 데이터로 한 번 더 학습한다. 알림은 느릴 수 있어 잠금 밖에서 보낸다.
-    try:
-        if key in _results:  # 첫 확인과 잠금 사이에 다른 요청이 같은 판정을 끝냈다
-            return _reuse(key, period)
-        public = _retrain(detection, key)
-    finally:
-        _retrain_lock.release()
-    _notify(public, detection)
-    return public
+    return None
 
 
-def _reuse(key: tuple, period: str) -> dict:
-    logger.info(f"[INFO] retrain skipped - already attempted for period={period}")
-    previous = _results[key]
-    return {
-        **previous,
-        "reasons": [*previous.get("reasons", []), "같은 판정은 재학습하지 않음(이전 결과 재사용)"],
-    }
-
-
-def _record(public: dict, key: tuple) -> dict:
-    """재학습을 시도한 결과를 남긴다. 실패면 쿨다운을 시작한다.
-
-    같은 판정에서 재사용하는 것은 학습을 끝낸 결정(promoted·gate_failed)뿐이다. promoted는 서빙이 교체를
-    다시 시도할 수 있게 남긴다. 학습 예외·데이터 부족·Production 없음은 환경이 고쳐지면 결과가 달라지므로
-    남기지 않고, 쿨다운이 지나면 같은 판정이라도 다시 시도한다.
-    """
-    global _last_failure_at
-    if public.get("status") in ("promoted", "gate_failed"):
-        _results[key] = public
-    if not public.get("promoted"):
-        _last_failure_at = time.monotonic()
-    return public
-
-
-def _retrain(detection: dict, key: tuple) -> dict:
-    """최근 627행으로 fine_tune을 돌려 DriftCheck 결과를 만든다. 호출자가 _retrain_lock을 잡고 있다."""
+def _retrain(detection: dict, rows: list[dict]) -> dict:
+    """fine-tuning을 실행해 DriftCheck 결과로 바꾼다. 예외는 결과(status)로 돌려준다."""
     reason = _detection_reason(detection)
     try:
-        rows = _load_recent_rows()
         logger.info(
-            f"[INFO] retrain triggered (rows={len(rows)}, "
-            f"data={rows[0]['date']}~{rows[-1]['date']})"
+            f"[INFO] retrain triggered (rows={len(rows)}, data={rows[0]['date']}~{rows[-1]['date']})"
         )
         result = _fine_tune(rows)
     except (ValueError, FileNotFoundError) as exc:
         if not (isinstance(exc, FileNotFoundError) or "insufficient_data" in str(exc)):
-            return _failed(detection, key, reason, exc)
+            return _failed(detection, reason, exc)
         logger.error(f"[ERROR] retrain skipped - insufficient data: {exc} (Production 유지)")
-        public = {
+        return {
             "status": "insufficient_data",
             "promoted": False,
             **_detection_fields(detection),
             "reasons": [reason, f"재학습 데이터 부족: {exc}"],
         }
-        return _record(public, key)
     except Exception as exc:
-        return _failed(detection, key, reason, exc)
+        return _failed(detection, reason, exc)
 
     public = {
         **result,
@@ -223,13 +259,13 @@ def _retrain(detection: dict, key: tuple) -> dict:
     }
     if public.get("promoted") and not public.get("version"):
         logger.error("[ERROR] fine_tune promoted without version - 교체 확인 불가")
-        public = {
+        return {
             "status": "retrain_failed",
             "promoted": False,
             **_detection_fields(detection),
             "reasons": [reason, "승격 결과에 version이 없어 서빙 교체를 확인할 수 없음"],
         }
-    elif public.get("promoted"):
+    if public.get("promoted"):
         logger.info(
             f"[OK] new_rmse={_fmt(public.get('rmse'))} naive={_fmt(public.get('naive_rmse'))}"
             f" - champion promoted: {MODEL_NAME} v{public['version']}"
@@ -241,18 +277,35 @@ def _retrain(detection: dict, key: tuple) -> dict:
             f"[GATE_FAILED] new_rmse={_fmt(public.get('rmse'))} - "
             f"{'; '.join(result.get('reasons') or [])} (Production 유지)"
         )
-    return _record(public, key)
+    return public
 
 
-def _failed(detection: dict, key: tuple, reason: str, exc: Exception) -> dict:
+def _data_failure(detection: dict, exc: Exception) -> dict:
+    reason = _detection_reason(detection)
+    if isinstance(exc, FileNotFoundError) or "insufficient_data" in str(exc):
+        logger.error(f"[ERROR] retrain skipped - insufficient data: {exc} (Production 유지)")
+        return {
+            "status": "insufficient_data",
+            "promoted": False,
+            **_detection_fields(detection),
+            "reasons": [reason, f"재학습 데이터 부족: {exc}"],
+        }
+    return _failed(detection, reason, exc)
+
+
+def _failed(detection: dict, reason: str, exc: Exception) -> dict:
     logger.error(f"[ERROR] retrain failed: {exc!r} (Production 유지)")
-    public = {
+    return {
         "status": "retrain_failed",
         "promoted": False,
         **_detection_fields(detection),
         "reasons": [reason, f"재학습 실패: {exc!r}"],
     }
-    return _record(public, key)
+
+
+def notify_reload(public: dict, pairs: list[dict]) -> None:
+    """Registry 승격 알림과 별도로 실제 서빙 교체 결과를 운영자에게 전달한다."""
+    _notify(public, evaluate(pairs))
 
 
 def reset_state() -> None:

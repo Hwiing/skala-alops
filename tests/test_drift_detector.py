@@ -6,6 +6,7 @@ from datetime import date, timedelta
 import pytest
 
 from serving_app.monitoring.drift_detector import (
+    DRIFT_MIN_RMSE,
     WINDOW_SIZE,
     compute_rmse,
     evaluate,
@@ -87,6 +88,17 @@ def test_drift_when_model_worse_than_naive():
     result = evaluate(make_pairs(WINDOW_SIZE, model_err=60, naive_err=35))
     assert result["status"] == "drift"
     assert is_drift(make_pairs(WINDOW_SIZE, 60, 35))
+
+
+def test_small_error_below_floor_is_not_drift():
+    # 가격이 고정된 시기: naive 1원, 모델 3원 → naive보다 나쁘지만 하한(10원) 이하라 ok
+    result = evaluate(make_pairs(WINDOW_SIZE, model_err=3, naive_err=1))
+    assert result["status"] == "ok" and result["min_rmse"] == DRIFT_MIN_RMSE
+
+
+@pytest.mark.parametrize(("model_err", "status"), [(10.0, "ok"), (10.5, "drift")])
+def test_floor_boundary(model_err, status):
+    assert evaluate(make_pairs(WINDOW_SIZE, model_err=model_err, naive_err=1))["status"] == status
 
 
 def test_tie_with_naive_is_not_drift():

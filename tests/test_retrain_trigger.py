@@ -2,6 +2,7 @@
 정상·보류·승격·게이트 탈락·데이터 부족·학습 실패·중복·쿨다운·동시 실행·알림을 검증한다."""
 
 import logging
+import threading
 from datetime import date
 
 import pytest
@@ -192,6 +193,15 @@ def test_no_cooldown_after_promotion(env):
     assert result["status"] == "promoted" and len(env["calls"]) == 2
 
 
+def test_updated_training_data_invalidates_previous_gate_result(env, monkeypatch):
+    env["result"] = dict(GATE_FAILED)
+    check(drift_pairs())
+    monkeypatch.setattr(rt, "RETRAIN_COOLDOWN_SECONDS", 0)
+    monkeypatch.setattr(rt, "_load_recent_rows", lambda: [{"date": "2026-03-01"}])
+    check(drift_pairs())
+    assert len(env["calls"]) == 2
+
+
 def test_concurrent_retrain_is_skipped(env):
     assert rt._retrain_lock.acquire(blocking=False)  # 다른 요청이 재학습 중인 상황
     try:
@@ -202,36 +212,72 @@ def test_concurrent_retrain_is_skipped(env):
     assert env["calls"] == []
 
 
-@pytest.mark.parametrize("error", [RuntimeError("mlflow down"), FileNotFoundError("csv")])
-def test_transient_failure_is_retried_for_same_detection_after_cooldown(env, monkeypatch, error):
-    """일시 장애(학습 예외·데이터 파일 없음)는 결과를 재사용하지 않는다. 쿨다운 뒤 같은 기간도 다시 학습."""
-    env["error"] = error
-    assert check(drift_pairs())["promoted"] is False
-    monkeypatch.setattr(rt, "RETRAIN_COOLDOWN_SECONDS", 0)
-    env["error"] = None
+class RacingLock:
+    """acquire 직전에 다른 요청이 같은 판정을 끝까지 처리하는 상황을 결정적으로 재현한다."""
 
-    assert check(drift_pairs())["status"] == "promoted"
-    assert len(env["calls"]) == 2
+    def __init__(self, before_acquire):
+        self._lock = threading.Lock()
+        self._before = before_acquire
+
+    def acquire(self, blocking=True):
+        if self._before is not None:
+            hook, self._before = self._before, None
+            hook()
+        return self._lock.acquire(blocking)
+
+    def release(self):
+        self._lock.release()
 
 
-def test_same_detection_during_result_logging_does_not_retrain(env):
-    """학습이 끝나 결과를 남기는 사이 같은 판정이 또 들어와도 다시 학습하지 않는다 (#47 리뷰 재현)."""
-    seen = []
-
-    class Reenter(logging.Handler):
-        def emit(self, record):
-            if record.getMessage().startswith("[OK]") and not seen:
-                seen.append(rt.check_and_trigger(drift_pairs()))
-
-    handler = Reenter()
-    logging.getLogger("aiops").addHandler(handler)
-    try:
-        first = check(drift_pairs())
-    finally:
-        logging.getLogger("aiops").removeHandler(handler)
-
-    assert first["status"] == "promoted" and seen
+def test_same_detection_racing_requests_train_once(env, monkeypatch):
+    other = {}
+    monkeypatch.setattr(
+        rt, "_retrain_lock", RacingLock(lambda: other.update(r=rt.check_and_trigger(drift_pairs())))
+    )
+    result = check(drift_pairs())  # 첫 확인 통과 뒤, lock 직전에 다른 요청이 학습·기록 완료
     assert len(env["calls"]) == 1
+    assert other["r"]["status"] == result["status"] == "promoted"
+    assert result["reasons"][-1] == "같은 판정은 재학습하지 않음(이전 결과 재사용)"
+
+
+def test_two_threads_same_detection_train_once(env):
+    started, release = threading.Event(), threading.Event()
+    original = rt._fine_tune
+
+    def slow_fine_tune(rows):
+        started.set()
+        release.wait(5)
+        return original(rows)
+
+    rt._fine_tune = slow_fine_tune
+    results = []
+    first = threading.Thread(target=lambda: results.append(rt.check_and_trigger(drift_pairs())))
+    first.start()
+    started.wait(5)
+    second = rt.check_and_trigger(drift_pairs())  # 학습 중 → 진행 중으로 바로 반환
+    release.set()
+    first.join(5)
+    third = rt.check_and_trigger(drift_pairs())  # 끝난 뒤 → 결과 재사용
+    assert len(env["calls"]) == 1
+    assert "진행 중" in second["reasons"][-1]
+    assert results[0]["status"] == third["status"] == "promoted"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [ValueError("insufficient_data: 최소 627행"), RuntimeError("mlflow down")],
+    ids=["insufficient_data", "retrain_failed"],
+)
+def test_transient_failure_is_retried_after_cooldown(env, monkeypatch, error):
+    env["error"] = error
+    check(drift_pairs())
+    assert check(drift_pairs())["status"] == "retrain_failed"  # 쿨다운 중: 재사용 아님
+    assert "쿨다운" in check(drift_pairs())["reasons"][-1]
+
+    env["error"] = None  # 데이터 복구·MLflow 복구
+    monkeypatch.setattr(rt, "RETRAIN_COOLDOWN_SECONDS", 0)  # 쿨다운 경과
+    assert check(drift_pairs())["status"] == "promoted"  # 같은 판정이라도 다시 학습
+    assert len(env["calls"]) == 2
 
 
 # ---------- 알림 ----------
