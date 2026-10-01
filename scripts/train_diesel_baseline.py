@@ -78,6 +78,9 @@ def main():
     naive = np.array([[frame.price[i]] * HORIZONS for i in kept_va])
     model_rmse = [rmse(true[:, k] - pred[:, k]) for k in range(HORIZONS)]
     naive_rmse = [rmse(true[:, k] - naive[:, k]) for k in range(HORIZONS)]
+    # 참고 기준: 모델 없이 세금·상한 규칙만 적용(변화 0). LSTM 자체의 기여를 따로 보기 위함
+    rule = np.array([frame.apply_policy(i, [0.0] * HORIZONS) for i in kept_va])
+    rule_rmse = [rmse(true[:, k] - rule[:, k]) for k in range(HORIZONS)]
 
     d = frame.dates
     meta = {
@@ -93,6 +96,7 @@ def main():
         "epochs": epochs,
         "rmse": model_rmse,
         "naive_rmse": naive_rmse,
+        "rule_rmse": rule_rmse,
     }
     print(f"데이터 {meta['data_period']} {len(rows)}행 ({'합성' if args.synthetic else '실측'})")
     print(
@@ -100,6 +104,7 @@ def main():
     )
     print(f"{'k주차 평균 RMSE 원/L':22}" + "".join(f"{k + 1}주".rjust(9) for k in range(HORIZONS)))
     print(f"{'naive (마지막 입력일 가격)':22}" + "".join(f"{v:9.1f}" for v in naive_rmse))
+    print(f"{'naive + 정책 규칙 (참고)':22}" + "".join(f"{v:9.1f}" for v in rule_rmse))
     print(f"{'LSTM + 정책 규칙':22}" + "".join(f"{v:9.1f}" for v in model_rmse))
     print(
         "naive보다 낮음: "
