@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="light dark" />
-<title>유가 AIOps</title>
+<title>유가 AIOps 대시보드</title>
 <link rel="icon" type="image/x-icon" href="/favicon.ico" />
 <style>
   /* ===================== Design tokens ===================== */
@@ -83,6 +83,7 @@
     margin: 0; background: var(--bg); color: var(--text);
     font-family: var(--sans); font-size: var(--fs-body); line-height: 1.6;
     -webkit-font-smoothing: antialiased; letter-spacing: -0.005em;
+    word-break: keep-all; overflow-wrap: break-word; /* 한글 어절 단위 줄바꿈 */
   }
   h1, h2, h3, p { margin: 0; }
   code { font-family: var(--mono); font-size: 0.92em; color: var(--text-2); }
@@ -122,6 +123,7 @@
   /* ===================== Sections ===================== */
   main { padding: var(--s7) 0 var(--s8); }
   .intro { margin-bottom: var(--s7); }
+  .eyebrow { font-size: var(--fs-sub); font-weight: 600; color: var(--accent); margin-bottom: var(--s1); }
   .intro .t-sub { margin-top: var(--s2); max-width: 36em; font-size: var(--fs-body); }
   .section { padding: var(--s7) 0; border-top: 1px solid var(--line); }
   .section:first-of-type { border-top: none; padding-top: 0; }
@@ -169,7 +171,7 @@
   .surface .segmented { background: var(--surface-hover); }
   .segmented input { position: absolute; opacity: 0; pointer-events: none; }
   .segmented label {
-    padding: var(--s2) var(--s5); border-radius: 6px; text-align: center; cursor: pointer;
+    padding: var(--s2) var(--s4); border-radius: 6px; text-align: center; cursor: pointer; white-space: nowrap;
     font-size: var(--fs-sub); font-weight: 600; color: var(--text-2);
     transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
   }
@@ -326,8 +328,9 @@
 
 <main class="container">
   <div class="intro">
-    <h1 class="t-display">드리프트 감지와 재학습</h1>
-    <p class="t-sub">배치를 보내면 휘발유 가격 예측 오차를 측정합니다. 오차가 임계치를 넘으면 재학습, 배포 게이트, 서빙 교체까지 자동으로 이어집니다.</p>
+    <p class="eyebrow">휘발유 가격 예측 모델 운영</p>
+    <h1 class="t-display">AIOps 대시보드</h1>
+    <p class="t-sub">배치를 보내 예측 오차를 측정합니다. 오차가 임계치를 넘으면 재학습, 배포 게이트, 서빙 교체까지 자동으로 이어집니다.</p>
   </div>
 
   <!-- ================= 시뮬레이션 (primary) ================= -->
