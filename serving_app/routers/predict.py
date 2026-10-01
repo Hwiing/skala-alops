@@ -82,6 +82,13 @@ def predict(req: PredictRequest):
     model = _get_model_or_503()
     base = req.sequence[-1].date
     values = _predict_values(model, [p.model_dump(mode="json") for p in req.sequence])
+    # 실시간 예측은 정답 없이 기록하고, 나중에 /data/upload로 정답이 들어오면 채운다.
+    recent_predictions.record(
+        base.isoformat(),
+        [round(v, 2) for v in values],
+        req.sequence[-1].diesel_price,
+        model.version,
+    )
     return PredictResponse(
         predictions=_weeks(base, values), base_date=base, model_version=model.version
     )
@@ -99,7 +106,27 @@ def batch_test(req: BatchTestRequest):
     model = _get_model_or_503()
     pairs = _pair_with_actual(model, [p.model_dump(mode="json") for p in req.rows])
     recent_predictions.record_batch(pairs, model.version)
+    return BatchTestResponse(predictions=pairs, drift_check=judge_and_swap())
 
+
+def fill_live_actuals(rows: list[dict]) -> int:
+    """업로드된 일별 가격으로 실시간 예측의 k주 정답을 채운다. 7일이 모두 있는 주만. 채운 주 수를 돌려준다."""
+    prices = {r["date"]: float(r["diesel_price"]) for r in rows}
+    filled = 0
+    for p in recent_predictions.pairs():
+        if p["source"] != "live":
+            continue
+        base = date.fromisoformat(p["date"])
+        for k, w in enumerate(WINDOWS):
+            days = [(base + timedelta(days=d)).isoformat() for d in w]
+            if p["actual"][k] is None and all(d in prices for d in days):
+                avg = round(sum(prices[d] for d in days) / len(days), 2)
+                filled += recent_predictions.fill_actual(p["date"], k + 1, avg)
+    return filled
+
+
+def judge_and_swap() -> dict:
+    """기록 전체로 AIOps 판정을 돌리고, 승격되면 그 버전으로 교체한다. 교체 성공 때만 기록을 비운다."""
     try:
         drift_check = DriftCheck.model_validate(
             retrain_trigger.check_and_trigger(recent_predictions.pairs())
@@ -117,5 +144,4 @@ def batch_test(req: BatchTestRequest):
             raise HTTPException(503, "모델 교체 결과가 공통 계약에 맞지 않습니다") from exc
         if drift_check["reload"]["reloaded"]:
             recent_predictions.clear()
-
-    return BatchTestResponse(predictions=pairs, drift_check=drift_check)
+    return drift_check

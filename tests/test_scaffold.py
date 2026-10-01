@@ -326,3 +326,73 @@ def test_local_loader_checks_missing_artifacts_before_import(monkeypatch, tmp_pa
     monkeypatch.setattr(model_loader, "LOCAL_PYFUNC_PATH", str(tmp_path / "missing"))
     with pytest.raises(FileNotFoundError):
         model_loader._load_from_local()
+
+
+# ---------- 실시간 예측 기록 → 업로드로 지연 정답 채우기 → 판정 (#14) ----------
+
+
+def _upload(client, monkeypatch, tmp_path, rows):
+    monkeypatch.setattr(data_router, "UPLOAD_DIR", str(tmp_path))
+    return client.post("/data/upload", files={"file": ("rows.csv", _csv(rows))})
+
+
+def test_predict_records_live_prediction_without_actual(batch, client):
+    client.post("/predict", json=payload())  # 마지막 입력일 2026-04-30, 가격 1619
+
+    assert predict_router.recent_predictions.pairs() == [
+        {
+            "date": "2026-04-30",
+            "predicted": [1620.0, 1621.0, 1622.0, 1623.0],
+            "actual": [None] * 4,
+            "naive": 1619.0,
+            "model_version": "champion:1",
+            "source": "live",
+        }
+    ]
+    assert batch.calls["trigger"] == []
+
+
+def test_upload_fills_only_fully_covered_weeks_and_judges(batch, client, monkeypatch, tmp_path):
+    client.post("/predict", json=payload())
+    # 2025-11-20 ~ 2026-05-13: 1주차(05-01~05-07)만 7일이 모두 있고 2주차(05-08~05-14)는 05-14가 없다
+    rows = make_rows(BATCH_MIN_ROWS, start="2025-11-20")
+    prices = {r["date"]: r["diesel_price"] for r in rows}
+    week1 = sum(prices[f"2026-05-0{d}"] for d in range(1, 8)) / 7
+
+    response = _upload(client, monkeypatch, tmp_path, rows)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["filled"] == 1
+    assert body["drift_check"]["status"] == "ok"
+    recorded = predict_router.recent_predictions.pairs()
+    assert recorded[0]["actual"] == [round(week1, 2), None, None, None]
+    assert batch.calls["trigger"] == [recorded]
+
+
+def test_upload_without_matured_live_predictions_skips_judgement(
+    batch, client, monkeypatch, tmp_path
+):
+    body = _upload(client, monkeypatch, tmp_path, make_rows(BATCH_MIN_ROWS)).json()
+
+    assert body["filled"] == 0
+    assert "drift_check" not in body
+    assert batch.calls["trigger"] == []
+
+
+def test_upload_promotion_reloads_and_clears_window(batch, client, monkeypatch, tmp_path):
+    client.post("/predict", json=payload())
+    batch.state["trigger"] = {
+        "status": "promoted",
+        "promoted": True,
+        "version": "2",
+        "rmse": [1.0] * 4,
+        "naive_rmse": [2.0] * 4,
+    }
+
+    body = _upload(client, monkeypatch, tmp_path, make_rows(BATCH_MIN_ROWS)).json()
+
+    assert body["filled"] == 4
+    assert body["drift_check"]["reload"] == {"reloaded": True, "version": "champion:2"}
+    assert batch.calls["reload"] == ["2"]
+    assert len(predict_router.recent_predictions) == 0
