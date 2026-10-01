@@ -1,6 +1,7 @@
 """MLflow Production 로더와 캐시 교체(reload_model) 테스트.
 
-실제 MLflow·TensorFlow 대신 가짜 레지스트리를 넣어 빠르게 검증한다.
+실제 MLflow·TensorFlow 대신 가짜 모듈을 sys.modules에 넣는다.
+CI는 requirements-dev.txt만 설치하므로 mlflow 없이도 돌아가야 한다.
 """
 
 import sys
@@ -9,6 +10,10 @@ from types import SimpleNamespace
 import pytest
 
 from serving_app import model_loader
+
+
+class MlflowException(Exception):
+    pass
 
 
 @pytest.fixture
@@ -21,8 +26,6 @@ def registry(monkeypatch):
             assert name == "GasolinePricePredictor"
             assert stages == ["Production"]
             if state["unregistered"]:
-                from mlflow.exceptions import MlflowException
-
                 raise MlflowException(f"Registered Model with name={name} not found")
             v = state["production"]
             return [SimpleNamespace(version=v)] if v else []
@@ -33,8 +36,14 @@ def registry(monkeypatch):
         state["loaded_uris"].append(uri)
         return f"keras:{uri}"
 
-    monkeypatch.setattr("mlflow.tracking.MlflowClient", FakeClient)
-    monkeypatch.setitem(sys.modules, "mlflow.tensorflow", SimpleNamespace(load_model=load_model))
+    fakes = {
+        "mlflow": SimpleNamespace(set_tracking_uri=lambda uri: None),
+        "mlflow.exceptions": SimpleNamespace(MlflowException=MlflowException),
+        "mlflow.tracking": SimpleNamespace(MlflowClient=FakeClient),
+        "mlflow.tensorflow": SimpleNamespace(load_model=load_model),
+    }
+    for name, module in fakes.items():
+        monkeypatch.setitem(sys.modules, name, module)
     monkeypatch.setattr(model_loader.GasolineScaler, "load", lambda path: "scaler")
     monkeypatch.setenv("MODEL_SOURCE", "mlflow")
     monkeypatch.setattr(model_loader, "_model_cache", None)
