@@ -1,122 +1,122 @@
 {
   "sequence": [
     {
-      "gasoline_price": 1717.28,
-      "crude_oil_price": 75.37,
+      "diesel_price": 1717.28,
+      "singapore_diesel_price": 75.37,
       "usd_krw": 1340.41,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1717.07,
-      "crude_oil_price": 75.44,
+      "diesel_price": 1717.07,
+      "singapore_diesel_price": 75.44,
       "usd_krw": 1340.56,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1716.9,
-      "crude_oil_price": 75.49,
+      "diesel_price": 1716.9,
+      "singapore_diesel_price": 75.49,
       "usd_krw": 1340.74,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1716.76,
-      "crude_oil_price": 75.55,
+      "diesel_price": 1716.76,
+      "singapore_diesel_price": 75.55,
       "usd_krw": 1340.94,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1716.66,
-      "crude_oil_price": 75.61,
+      "diesel_price": 1716.66,
+      "singapore_diesel_price": 75.61,
       "usd_krw": 1341.17,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1716.6,
-      "crude_oil_price": 75.66,
+      "diesel_price": 1716.6,
+      "singapore_diesel_price": 75.66,
       "usd_krw": 1341.41,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1716.59,
-      "crude_oil_price": 75.71,
+      "diesel_price": 1716.59,
+      "singapore_diesel_price": 75.71,
       "usd_krw": 1341.68,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1716.62,
-      "crude_oil_price": 75.75,
+      "diesel_price": 1716.62,
+      "singapore_diesel_price": 75.75,
       "usd_krw": 1341.96,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1716.7,
-      "crude_oil_price": 75.79,
+      "diesel_price": 1716.7,
+      "singapore_diesel_price": 75.79,
       "usd_krw": 1342.27,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1716.82,
-      "crude_oil_price": 75.83,
+      "diesel_price": 1716.82,
+      "singapore_diesel_price": 75.83,
       "usd_krw": 1342.6,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1717.0,
-      "crude_oil_price": 75.87,
+      "diesel_price": 1717.0,
+      "singapore_diesel_price": 75.87,
       "usd_krw": 1342.94,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1717.23,
-      "crude_oil_price": 75.9,
+      "diesel_price": 1717.23,
+      "singapore_diesel_price": 75.9,
       "usd_krw": 1343.31,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1717.5,
-      "crude_oil_price": 75.93,
+      "diesel_price": 1717.5,
+      "singapore_diesel_price": 75.93,
       "usd_krw": 1343.69,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1717.83,
-      "crude_oil_price": 75.95,
+      "diesel_price": 1717.83,
+      "singapore_diesel_price": 75.95,
       "usd_krw": 1344.08,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1718.2,
-      "crude_oil_price": 75.97,
+      "diesel_price": 1718.2,
+      "singapore_diesel_price": 75.97,
       "usd_krw": 1344.49,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1718.62,
-      "crude_oil_price": 75.98,
+      "diesel_price": 1718.62,
+      "singapore_diesel_price": 75.98,
       "usd_krw": 1344.92,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1719.09,
-      "crude_oil_price": 75.99,
+      "diesel_price": 1719.09,
+      "singapore_diesel_price": 75.99,
       "usd_krw": 1345.35,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1719.59,
-      "crude_oil_price": 76.0,
+      "diesel_price": 1719.59,
+      "singapore_diesel_price": 76.0,
       "usd_krw": 1345.8,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1720.13,
-      "crude_oil_price": 76.0,
+      "diesel_price": 1720.13,
+      "singapore_diesel_price": 76.0,
       "usd_krw": 1346.26,
       "tax_or_supply_feature": 0.0
     },
     {
-      "gasoline_price": 1720.71,
-      "crude_oil_price": 76.0,
+      "diesel_price": 1720.71,
+      "singapore_diesel_price": 76.0,
       "usd_krw": 1346.73,
       "tax_or_supply_feature": 0.0
     }

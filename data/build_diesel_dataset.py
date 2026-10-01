@@ -1,6 +1,6 @@
 """경유·싱가포르 경유·환율 실측 원본과 경유 유류세 구간표로 4피처 CSV를 만든다.
 
-공통 학습·서빙 계약은 아직 gasoline_price이므로 이 결과를 기존 API에 업로드하지 않는다.
+공통 컬럼명은 #42에서 diesel_price로 전환됐다(계약 v2, docs/contracts.md).
 """
 
 import csv

@@ -20,6 +20,6 @@ def latest_upload(upload_dir: str = UPLOAD_DIR) -> str:
     if not files:
         raise FileNotFoundError(
             "업로드된 휘발유 데이터가 없습니다. 대시보드에서 CSV 파일을 먼저 업로드하세요 "
-            f"(data/sample_gasoline_prices.csv를 예시로 업로드해볼 수 있습니다 -> {upload_dir}/)."
+            f"(data/sample_diesel_prices.csv를 예시로 업로드해볼 수 있습니다 -> {upload_dir}/)."
         )
     return files[-1]
