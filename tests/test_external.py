@@ -2,7 +2,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from data.build_dataset import build_rows
+from data.build_dataset import LEGACY_GASOLINE_COLUMNS, build_rows
 from data.ecos import parse_ecos_response
 from data.external import (
     asof_values,
@@ -11,7 +11,7 @@ from data.external import (
     load_usd_krw,
     tax_cut_rates,
 )
-from data.features import LEGACY_GASOLINE_COLUMNS, validate_rows
+from data.features import validate_rows
 
 D = date.fromisoformat
 

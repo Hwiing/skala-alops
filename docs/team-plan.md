@@ -13,17 +13,17 @@ GitHub 이슈의 담당자별 체크리스트를 기준으로 진행합니다.
 
 ```mermaid
 flowchart TD
-  A[오피넷 CSV + 시점에 맞는 외부 지표] --> B[정규화 / 20일 시퀀스]
+  A[오피넷 CSV + 시점에 맞는 외부 지표] --> B[정규화 / 120일 입력 / 28일 모델 시퀀스]
   B --> C[Baseline / Naive / LSTM]
-  C --> D[MLflow Tracking + 고정 scaler]
-  D --> E{RMSE ≤ 10원 AND naive보다 우수}
-  E -->|통과| F[Registry Production]
+  C --> D[MLflow pyfunc + 모델별 scaler]
+  D --> E{1주 RMSE ≤ 50 / 4주 naive 우위 / Production 비교}
+  E -->|통과| F[Registry Production + champion]
   E -->|실패| G[기존 Production 유지]
   F --> H[FastAPI / 단일 Docker]
-  H --> I[예측 + 다음날 실제값]
-  I --> J[최근 21건 RMSE / aiops.log]
+  H --> I[1~4주 예측 + 실제 주간 평균]
+  I --> J[최근 28개 기준일 / 1주 RMSE와 naive 비교]
   J --> M[운영자 알림]
-  J -->|드리프트| K[최근 30일 fine-tuning + 독립 검증]
+  J -->|드리프트| K[최근 627행 / 365일 학습 / 독립 90일 검증]
   K --> E
   F --> L[서빙 캐시 교체 / 윈도우 초기화]
   L --> H
@@ -41,7 +41,7 @@ flowchart TD
 ## 발표·기획서 6항목
 
 1. 운송·물류회사 유류비 계획의 Pain Point와 이해관계자 가치.
-2. 다음날 가격 예측 솔루션, 품질·응답 시간 운영 목표.
+2. 1~4주 경유 평균가 예측 솔루션, 품질·응답 시간 운영 목표.
 3. 배포 게이트·모니터링·드리프트 대응 정책 및 근거.
 4. 위 아키텍처와 실제 구현 대응.
 5. Swagger 기반 API 명세와 요청/응답·오류 예시.

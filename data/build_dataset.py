@@ -14,7 +14,8 @@
 """
 
 import csv
-from datetime import date
+from datetime import date, timedelta
+from math import isfinite
 
 from data.external import (
     CRUDE_LAG_DAYS,
@@ -27,10 +28,38 @@ from data.external import (
     load_usd_krw,
     tax_cut_rates,
 )
-from data.features import LEGACY_GASOLINE_COLUMNS, validate_rows
 from data.opinet import load_opinet_gasoline
 
 DEFAULT_OUT = "data/processed/gasoline_features.csv"
+LEGACY_GASOLINE_COLUMNS = (
+    "gasoline_price",
+    "dubai_crude_price",
+    "usd_krw",
+    "tax_or_supply_feature",
+)
+
+
+def validate_legacy_gasoline_rows(rows: list[dict]) -> list[dict]:
+    """과거 휘발유·Dubai 결과만 검사한다. 경유 공통 계약과 의도적으로 분리한다."""
+    result = []
+    previous = None
+    for row in rows:
+        missing = [key for key in ("date", *LEGACY_GASOLINE_COLUMNS) if row.get(key) in (None, "")]
+        if missing:
+            raise ValueError(f"필수 값이 비어 있습니다: {missing} (행: {row.get('date')})")
+        day = date.fromisoformat(row["date"])
+        if previous is not None and day != previous + timedelta(days=1):
+            raise ValueError("date는 중복/누락 없이 하루 간격 오름차순이어야 합니다")
+        point = {key: float(row[key]) for key in LEGACY_GASOLINE_COLUMNS}
+        if not all(isfinite(value) for value in point.values()):
+            raise ValueError("피처에 NaN/Infinity를 사용할 수 없습니다")
+        if any(point[key] <= 0 for key in LEGACY_GASOLINE_COLUMNS[:3]):
+            raise ValueError("가격과 환율은 양수여야 합니다")
+        result.append({"date": day.isoformat(), **point})
+        previous = day
+    if not result:
+        raise ValueError("데이터 행이 없습니다")
+    return result
 
 
 def build_rows(gasoline: list[dict], crude, fx, tax_periods) -> tuple[list[dict], int]:
@@ -47,10 +76,8 @@ def build_rows(gasoline: list[dict], crude, fx, tax_periods) -> tuple[list[dict]
         {**row, **{name: values[i] for name, values in columns.items()}}
         for i, row in enumerate(kept)
     ]
-    # 하루 간격·양수·유한값을 같은 검사 함수로 확인하되, 휘발유 전용 컬럼으로 검사한다.
-    validated = validate_rows(
-        [{k: str(v) for k, v in row.items()} for row in rows], LEGACY_GASOLINE_COLUMNS
-    )
+    # 하루 간격·양수·유한값을 휘발유 전용 계약으로 검사한다.
+    validated = validate_legacy_gasoline_rows([{k: str(v) for k, v in row.items()} for row in rows])
     return validated, len(gasoline) - len(kept)
 
 

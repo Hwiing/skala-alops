@@ -1,30 +1,25 @@
-"""
-Day3: RMSE 기반 데이터 드리프트 판정.
+"""경유 v2 드리프트 계약: 최근 28개 기준일의 1주 RMSE > 같은 기간 naive RMSE.
 
-판단 기준 - 최근 WINDOW_SIZE(21)건의 (predicted, actual) 쌍으로 RMSE를 계산해
-RMSE_THRESHOLD(10원/L)와 비교한다. 너무 짧은 윈도우는 노이즈에 민감하고,
-너무 긴 윈도우는 드리프트 반응이 느려진다 - 21건/10원은 팀의 초기 가설이며 실제 데이터로 검증 후 확정한다.
+배포 게이트 50원과 탐지 기준은 별개다. 계산 구현은 AIOps 담당 TODO이며 성공으로 표시하지 않는다.
 """
 
-RMSE_THRESHOLD = 10.00
-WINDOW_SIZE = 21  # 최근 21건 기준
+from data.contracts import PAIR_WINDOW
+
+WINDOW_SIZE = PAIR_WINDOW
 
 
-def compute_rmse(recent_predictions: list[dict]) -> float:
+def compute_rmse(recent_predictions: list[dict], *, naive: bool = False) -> float:
+    """BatchPair 목록의 1주차 RMSE.
+
+    TODO: actual[0]과 predicted[0]의 오차, naive=True면 actual[0]과 naive의 오차를
+    sqrt(mean(error**2))로 계산한다. 빈 목록은 0.0으로 반환한다.
+    목록의 date는 예측 기준일이며 같은 기준일의 정답과 비교한다.
     """
-    recent_predictions: [{"predicted": float, "actual": float}, ...]
-
-    TODO(Day3, 핵심 실습): 아래 수식대로 RMSE를 직접 구현하세요.
-        RMSE = sqrt( mean( (actual - predicted) ** 2 ) )
-
-    빈 리스트가 들어오면 드리프트가 없다고 간주할 수 있도록 0.0을 반환하세요.
-    """
-    raise NotImplementedError("compute_rmse를 구현하세요 (실습 4-1)")
+    raise NotImplementedError("compute_rmse: 경유 1주차·naive RMSE 구현 필요")
 
 
 def is_drift(recent_predictions: list[dict]) -> bool:
     if len(recent_predictions) < WINDOW_SIZE:
-        return False  # 아직 판단할 만큼 데이터가 쌓이지 않음
+        return False  # 호출자는 insufficient_data로 구분한다.
     window = recent_predictions[-WINDOW_SIZE:]
-    rmse = compute_rmse(window)
-    return rmse > RMSE_THRESHOLD
+    return compute_rmse(window) > compute_rmse(window, naive=True)
