@@ -62,6 +62,8 @@ MODEL_SOURCE=mlflow LOADING_MODE=eager make run
 로컬 pyfunc는 `serving_app/models/diesel_pyfunc`, Registry 버전은 `champion:<번호>`로 식별합니다.
 학습 실패나 게이트 미통과 시 Production이 없을 수 있습니다. 실측 학습·실제 버전 전환·Docker 실행
 증빙은 공통 계약 테스트와 별도로 확인합니다. `make docker`로 단일 컨테이너를 실행할 수 있습니다.
+이미지는 모델·데이터 없이 시작합니다(`/predict` 503). 실제 경유 CSV 전달, 컨테이너 안 학습·등록, 볼륨, MLflow 전환은
+[공통 계약 - Docker 실행·영속화](docs/contracts.md#docker-실행영속화)를 참고하세요.
 
 ## 구조와 역할
 

@@ -165,3 +165,35 @@ AIOps 담당은 `fine_tune()` 결과를 이 상태로 전달하고, 원인을 `r
 
 `make lint test`는 공통 상수·CSV/API 날짜/수치·4주 출력·상태 모순·실패 시 기록 유지와 예시 파일을
 검증합니다. TensorFlow/MLflow 실모델 학습·Docker·운영자 알림 증빙은 별도 통합 실행으로 확보합니다.
+
+## Docker 실행·영속화
+
+단일 컨테이너(`serving_app/docker-compose.yml`, 포트 8000). 런타임 데이터는 이름 있는 볼륨에 둡니다.
+
+| 볼륨 | 컨테이너 경로 | 내용 |
+|---|---|---|
+| `uploads` | `/app/data/uploads` | 대시보드·`/data/upload`로 올린 CSV |
+| `processed` | `/app/data/processed` | 학습용 경유 CSV `diesel_features_2008_spliced.csv` (호스트에서 `cp`로 넣음) |
+| `models` | `/app/serving_app/models` | `diesel/`(seed별 LSTM·scaler·meta), `diesel_pyfunc/`(`MODEL_SOURCE=local`용 pyfunc). scaler는 모델 폴더 안에 포함 |
+| `logs` | `/app/logs` | `aiops.log` |
+| `mlflow-db` | `/app/runtime` | `mlflow.db` (`MLFLOW_TRACKING_URI=sqlite:////app/runtime/mlflow.db`) |
+| `mlruns` | `/app/mlruns` | MLflow 아티팩트(등록된 pyfunc) |
+
+- `restart`·`down`·재빌드 후에도 유지되고, `down -v`로만 삭제됩니다. `restart: unless-stopped`.
+- 이미지에는 데이터·모델을 넣지 않습니다(`data/processed`는 `.dockerignore` 제외). v2 모델은 실제 경유 CSV가 필요하며 `data/sample_diesel_prices.csv`(120행)로는 학습할 수 없습니다.
+- 호스트의 `mlflow.db`·`mlruns`는 공유하지 않습니다. 아티팩트 경로가 호스트 절대경로로 기록되어 컨테이너에서 찾을 수 없으므로 컨테이너 안에서 학습·등록합니다.
+- 모델이 없으면 서버는 뜨고 `/predict`만 503입니다(기본 lazy). eager는 시작 시 로드 실패가 바로 드러나지만, 모델이 준비된 뒤 전환합니다.
+
+```bash
+dc() { docker compose -f serving_app/docker-compose.yml "$@"; }  # bash·zsh 공통
+dc up -d --build                                                         # 빌드 + 실행 (lazy/local, /predict 503)
+# 1) 학습 데이터 전달 (호스트에서 data/README.md 절차로 만든 실제 CSV)
+dc cp data/processed/diesel_features_2008_spliced.csv serving-app:/app/data/processed/
+# 2-a) local 모델: serving_app/models/diesel/, diesel_pyfunc/ 생성 → 재시작 없이 다음 /predict부터 사용(lazy)
+dc exec serving-app python scripts/train_diesel_baseline.py
+# 2-b) MLflow: 기록 → 배포 게이트 → 통과 시 DieselPricePredictor 등록·Production·alias champion
+dc exec serving-app python serving_app/diesel_registry.py
+# 3) champion 서빙으로 전환
+MODEL_SOURCE=mlflow dc up -d
+curl -s localhost:8000/health                                            # model_version: champion:<버전>
+```
