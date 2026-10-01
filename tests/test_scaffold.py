@@ -29,7 +29,10 @@ def payload(length=20):
 def test_dashboard_health_and_docs(client):
     assert client.get("/").status_code == 200
     assert client.get("/docs").status_code == 200
-    assert client.get("/health").json()["model_loaded"] is False
+    health = client.get("/health").json()
+    assert health["model_loaded"] is False
+    assert health["model_version"] is None
+    assert health["model_source"] == "local"
 
 
 @pytest.mark.parametrize("length", [19, 21])
@@ -57,6 +60,7 @@ def test_predict_contract_with_injected_model(client, monkeypatch):
     response = client.post("/predict", json=payload())
     assert response.status_code == 200
     assert response.json() == {"predicted_price": 1712.4, "model_version": "test-only"}
+    assert client.get("/health").json()["model_version"] == "test-only"
 
 
 def test_missing_model_returns_503(client, monkeypatch):
@@ -115,3 +119,34 @@ def test_local_loader_checks_missing_artifacts_before_import(monkeypatch, tmp_pa
     monkeypatch.setattr(model_loader, "LOCAL_MODEL_PATH", str(tmp_path / "missing.keras"))
     with pytest.raises(FileNotFoundError):
         model_loader._load_from_local()
+
+
+def _csv(rows, fieldnames):
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
+    return output.getvalue()
+
+
+def _bad_uploads():
+    rows = list(csv.DictReader(io.StringIO(SAMPLE.read_text())))
+    fields = list(rows[0].keys())
+    negative = [dict(r) for r in rows]
+    negative[5]["gasoline_price"] = "-1"
+    return {
+        "missing_column": _csv(rows, [f for f in fields if f != "gasoline_price"]).encode(),
+        "too_few_rows": _csv(rows[:40], fields).encode(),
+        "non_positive": _csv(negative, fields).encode(),
+        "not_utf8": _csv(rows, fields).encode("utf-16"),
+    }
+
+
+@pytest.mark.parametrize("case", ["missing_column", "too_few_rows", "non_positive", "not_utf8"])
+def test_invalid_upload_rejected_with_400(client, monkeypatch, tmp_path, case):
+    monkeypatch.setattr(data_router, "UPLOAD_DIR", str(tmp_path))
+    body = _bad_uploads()[case]
+    response = client.post("/data/upload", files={"file": ("bad.csv", body)})
+    assert response.status_code == 400
+    assert response.json()["detail"]
+    assert not list(tmp_path.iterdir())
