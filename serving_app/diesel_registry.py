@@ -8,7 +8,7 @@
         (models:/DieselPricePredictor/Production 또는 models:/DieselPricePredictor@champion, 같은 버전).
   로컬: save_local_pyfunc()로 저장한 폴더를 mlflow.pyfunc.load_model(<폴더>)로 같은 방식으로 읽는다.
   정책표는 실행 위치의 data/reference/를 읽는다.
-- 게이트(serving_app/diesel_gate.py): 1주차 RMSE ≤ 50 AND 1~4주 모두 < naive AND 1주차 ≤ Production.
+- 게이트(serving_app/diesel_gate.py): 1주차 RMSE ≤ 50 AND 1~4주 모두 < naive AND 1~4주 평균 ≤ Production.
   Production은 새 모델과 같은 검증 구간으로 다시 평가해 비교한다.
 - 미통과 시 등록하지 않는다. Production이 없으면 "서비스할 모델 없음", 있으면 "기존 버전 유지"로 구분해 기록.
 - fine_tune(rows) (#11): Production에서 warm start, 최근 365일 학습, 학습과 겹치지 않는 최근 90일로 같은 게이트.
@@ -60,8 +60,11 @@ from serving_app.diesel_training import (  # noqa: E402
 )
 from serving_app.schemas import FineTuneResult
 
-FINE_TUNE_EPOCHS = 10
-FINE_TUNE_LR = 1e-4  # base 학습(1e-3)보다 낮게, 기존 지식을 유지하며 최근 패턴만 반영
+# warm start 강도. base 학습(3e-4·40 epoch)보다 약하게 둬서 17년치로 배운 것을 유지한다.
+# 더 세게(1e-3·30 epoch 등) 하면 5개 시점 중 4곳에서 Production보다 나빠졌다 (evidence/11).
+# 실험·시연용으로만 환경변수로 바꾼다.
+FINE_TUNE_EPOCHS = int(os.getenv("FINE_TUNE_EPOCHS", "10"))
+FINE_TUNE_LR = float(os.getenv("FINE_TUNE_LR", "1e-4"))
 DEFAULT_CSV = "data/processed/diesel_features_2008_spliced.csv"
 
 
