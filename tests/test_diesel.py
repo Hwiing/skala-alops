@@ -66,6 +66,20 @@ def test_cap_known_only_after_announcement():
     assert caps.retail_change("2026-03-27", as_of="2026-03-26") == pytest.approx(210 * 0.33)
 
 
+def test_cap_path_extends_last_announced_and_keeps_pass_through():
+    caps = CapSchedule()
+    # 3/26 시점: 3/27~4/9 1923원이 발표됨 → 그 뒤(미발표)도 1713이 아니라 1923이 이어진다
+    assert caps.known_cap("2026-04-11", as_of="2026-03-26") == 1923
+    assert caps.retail_change("2026-04-11", as_of="2026-03-26") == pytest.approx(210 * (1 - 0))
+    # 6/27 시행된 -150원 변경은 7/4까지 반영이 더 진행된다: -150 × (pass(7) − pass(0))
+    assert caps.retail_change("2026-07-04", as_of="2026-06-27") == pytest.approx(
+        -150 * (pass_ratio(7) - pass_ratio(0))
+    )
+    # 미래 발표 미사용: 6/25 시점엔 6/27 인하(6/26 발표)를 모른다
+    assert caps.retail_change("2026-07-04", as_of="2026-06-25") == 0.0
+    assert caps.known_cap("2026-07-04", as_of="2026-06-25") == 1923
+
+
 def test_features_use_only_past():
     rows = make_rows()
     i = 150

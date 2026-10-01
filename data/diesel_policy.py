@@ -110,19 +110,36 @@ class CapSchedule:
         day = _day(day)
         return next((c for s, e, c, _ in self.rows if s <= day <= e), None)
 
+    def _known(self, as_of: date) -> list[tuple]:
+        """as_of까지 발표된 상한 구간 (시행일 순)."""
+        return sorted((r for r in self.rows if r[3] <= as_of), key=lambda r: r[0])
+
     def known_cap(self, day, as_of) -> float | None:
-        """as_of 시점에 알려진 day의 상한. 아직 발표 안 된 기간이면 as_of의 상한이 이어진다고 본다."""
+        """as_of 시점에 알려진 day의 상한. 발표된 마지막 구간 뒤로는 그 상한이 이어진다고 본다."""
         day, as_of = _day(day), _day(as_of)
-        hit = next((c for s, e, c, a in self.rows if s <= day <= e and a <= as_of), None)
-        return hit if hit is not None else self.cap(as_of)
+        started = [c for s, _, c, _ in self._known(as_of) if s <= day]
+        return started[-1] if started else None
+
+    def _retail_level(self, day: date, known: list[tuple]) -> float:
+        """알려진 상한 경로가 day의 소매가에 반영된 누적액 (변경마다 재고 시차 적용)."""
+        level, prev = 0.0, None
+        for s, _, c, _ in known:
+            if s > day:
+                break
+            level += (c if prev is None else c - prev) * (
+                1.0 if prev is None else pass_ratio((day - s).days)
+            )
+            prev = c
+        return level
 
     def retail_change(self, day, as_of) -> float:
-        """as_of 대비 day에 소매가로 반영될 상한 변화분 (발표된 변경만, 재고 시차 반영)."""
+        """as_of 대비 day에 소매가로 더 반영될 상한 변화분.
+
+        발표된 변경만 쓰고, 이미 시행돼 반영이 진행 중인 변경의 남은 몫도 포함한다
+        (= day의 누적 반영액 − as_of의 누적 반영액).
+        """
         day, as_of = _day(day), _day(as_of)
-        now = self.cap(as_of)
-        if now is None:
+        known = self._known(as_of)
+        if not known or known[0][0] > as_of:  # as_of에 상한이 없으면 묶일 수 없다
             return 0.0
-        for s, e, c, a in self.rows:
-            if s <= day <= e and a <= as_of and s > as_of:
-                return (c - now) * pass_ratio((day - s).days)
-        return 0.0
+        return self._retail_level(day, known) - self._retail_level(as_of, known)
