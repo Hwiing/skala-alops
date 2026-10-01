@@ -109,6 +109,15 @@ def batch_test(req: BatchTestRequest):
     return BatchTestResponse(predictions=pairs, drift_check=judge_and_swap())
 
 
+# 판정·교체가 끝나지 않은 기록이 있는지. 정답을 채우면 켜고, 판정이 끝났고 교체가 필요 없거나
+# 성공했을 때만 끈다. 업로드는 새 정답이 없어도 이 값이 켜져 있으면 다시 판정한다.
+_judgement_pending = False
+
+
+def judgement_pending() -> bool:
+    return _judgement_pending
+
+
 def fill_live_actuals(rows: list[dict]) -> int:
     """업로드된 일별 가격으로 실시간 예측의 k주 정답을 채운다. 7일이 모두 있는 주만. 채운 주 수를 돌려준다."""
     prices = {r["date"]: float(r["diesel_price"]) for r in rows}
@@ -122,11 +131,20 @@ def fill_live_actuals(rows: list[dict]) -> int:
             if p["actual"][k] is None and all(d in prices for d in days):
                 avg = round(sum(prices[d] for d in days) / len(days), 2)
                 filled += recent_predictions.fill_actual(p["date"], k + 1, avg)
+    if filled:
+        global _judgement_pending
+        _judgement_pending = True
     return filled
 
 
 def judge_and_swap() -> dict:
-    """기록 전체로 AIOps 판정을 돌리고, 승격되면 그 버전으로 교체한다. 교체 성공 때만 기록을 비운다."""
+    """기록 전체로 AIOps 판정을 돌리고, 승격되면 그 버전으로 교체한다. 교체 성공 때만 기록을 비운다.
+
+    판정 오류(501/503)·재학습 미완료(retrain_failed: 예외·쿨다운·다른 재학습 진행 중)·교체 실패는
+    _judgement_pending을 켠 채로 둬서 다음 업로드가 다시 시도한다.
+    """
+    global _judgement_pending
+    _judgement_pending = True
     try:
         drift_check = DriftCheck.model_validate(
             retrain_trigger.check_and_trigger(recent_predictions.pairs())
@@ -136,12 +154,16 @@ def judge_and_swap() -> dict:
     except ValidationError as exc:
         raise HTTPException(503, "AIOps 결과가 공통 계약에 맞지 않습니다") from exc
 
+    if drift_check["status"] == "retrain_failed":
+        return drift_check
     if drift_check.get("promoted"):
         drift_check["reload"] = model_loader.reload_model(drift_check.get("version"))
         try:
             DriftCheck.model_validate(drift_check)
         except ValidationError as exc:
             raise HTTPException(503, "모델 교체 결과가 공통 계약에 맞지 않습니다") from exc
-        if drift_check["reload"]["reloaded"]:
-            recent_predictions.clear()
+        if not drift_check["reload"]["reloaded"]:
+            return drift_check
+        recent_predictions.clear()
+    _judgement_pending = False
     return drift_check

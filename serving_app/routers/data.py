@@ -21,9 +21,11 @@ MIN_ROWS = (
 )
 
 
+# def(동기)라서 FastAPI가 스레드풀에서 실행한다. 업로드 뒤 판정이 재학습(TensorFlow, 수십 초)까지
+# 이어져도 이벤트 루프를 막지 않아 /health·/predict는 계속 응답한다.
 @router.post("/upload")
-async def upload(file: UploadFile = File(...)):
-    raw = await file.read()
+def upload(file: UploadFile = File(...)):
+    raw = file.file.read()
     try:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -46,11 +48,16 @@ async def upload(file: UploadFile = File(...)):
     with open(dest, "w", encoding="utf-8", newline="") as f:
         f.write(text)
 
-    # 업로드는 실시간 예측의 지연 정답이기도 하다. 새로 채운 정답이 있을 때만 판정한다.
+    # 업로드는 실시간 예측의 지연 정답이기도 하다. 새로 채운 정답이 있거나, 이전 판정·교체가
+    # 끝나지 않았으면(판정 오류·교체 실패) 판정한다. 같은 판정은 AIOps가 이전 결과를 재사용하므로
+    # 재학습 없이 교체만 다시 시도된다.
     filled = predict_router.fill_live_actuals(rows)
     result = {"filename": os.path.basename(dest), "rows": len(rows), "filled": filled}
-    if filled:
-        result["drift_check"] = predict_router.judge_and_swap()
+    if filled or predict_router.judgement_pending():
+        try:
+            result["drift_check"] = predict_router.judge_and_swap()
+        except HTTPException as exc:  # 파일 저장·정답 적재는 끝났으므로 업로드는 성공으로 둔다
+            result["drift_check_error"] = {"status_code": exc.status_code, "detail": exc.detail}
     return result
 
 

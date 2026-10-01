@@ -33,7 +33,11 @@ class PredictionWindow:
         actual: list[float | None] | None = None,
         source: str = "live",
     ) -> None:
-        """예측 1건 기록. 같은 date가 이미 있으면 교체(재전송 중복 방지)."""
+        """예측 1건 기록. 같은 date가 이미 있으면 교체(재전송 중복 방지).
+
+        정답은 시장 실제값이라 예측을 다시 해도 바뀌지 않는다. 새 actual이 None인 주차는 기존 정답을 유지한다
+        (실시간 /predict 재호출이 업로드로 채운 정답을 지우지 않도록).
+        """
         entry = {
             "date": date,
             "predicted": list(predicted),
@@ -43,6 +47,12 @@ class PredictionWindow:
             "source": source,
         }
         with self._lock:
+            for r in self._records:
+                if r["date"] == date:
+                    entry["actual"] = [
+                        new if new is not None else old
+                        for new, old in zip(entry["actual"], r["actual"])
+                    ]
             self._records = [r for r in self._records if r["date"] != date]
             self._records.append(entry)
             self._records.sort(key=lambda r: r["date"])
