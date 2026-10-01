@@ -21,8 +21,8 @@ def make_rows(n=60, start="2023-01-01"):
     return [
         {
             "date": (date.fromisoformat(start) + timedelta(days=i)).isoformat(),
-            "gasoline_price": str(1500 + i),
-            "crude_oil_price": str(80 + i / 10),
+            "diesel_price": str(1500 + i),
+            "singapore_diesel_price": str(80 + i / 10),
             "usd_krw": "1300",
             "tax_or_supply_feature": "25",
         }
@@ -32,8 +32,8 @@ def make_rows(n=60, start="2023-01-01"):
 
 def test_feature_order_is_the_shared_contract():
     assert FEATURE_COLUMNS == (
-        "gasoline_price",
-        "crude_oil_price",
+        "diesel_price",
+        "singapore_diesel_price",
         "usd_krw",
         "tax_or_supply_feature",
     )
@@ -45,8 +45,8 @@ def test_sequences_are_n_by_20_by_4_and_target_is_next_day():
     assert (len(X), len(X[0]), len(X[0][0])) == (60 - SEQ_LEN, SEQ_LEN, 4)
     for i in (0, len(X) - 1):
         # i번째 입력의 마지막 날 다음 날이 타깃
-        assert y[i] == rows[i + SEQ_LEN]["gasoline_price"]
-        assert y[i] == rows[i + SEQ_LEN - 1]["gasoline_price"] + 1
+        assert y[i] == rows[i + SEQ_LEN]["diesel_price"]
+        assert y[i] == rows[i + SEQ_LEN - 1]["diesel_price"] + 1
 
 
 def test_scaler_is_fit_on_training_rows_only():
@@ -56,8 +56,8 @@ def test_scaler_is_fit_on_training_rows_only():
     X, y = build_sequences(rows, scaler)
     _, y_train, _, y_test = train_test_split(X, y)
     # 학습 타깃은 모두 fit 구간에 있고, 검증 타깃은 하나도 들어가지 않는다
-    assert y_train[-1] == fit_rows[-1]["gasoline_price"]
-    assert min(y_test) > scaler.maximums["gasoline_price"]
+    assert y_train[-1] == fit_rows[-1]["diesel_price"]
+    assert min(y_test) > scaler.maximums["diesel_price"]
 
 
 def test_inverse_transform_restores_won_per_liter():
@@ -82,7 +82,7 @@ def test_rejects_missing_column(column):
         validate_rows(rows)
 
 
-@pytest.mark.parametrize("column", ["gasoline_price", "crude_oil_price", "usd_krw"])
+@pytest.mark.parametrize("column", ["diesel_price", "singapore_diesel_price", "usd_krw"])
 @pytest.mark.parametrize("value", ["0", "-1", "nan", "inf"])
 def test_rejects_non_positive_or_non_finite(column, value):
     rows = make_rows(3)
@@ -120,7 +120,7 @@ def test_finetune_split_keeps_targets_disjoint():
     _, y_train = build_sequences(train_rows, scaler)
     _, y_val = build_sequences(val_rows, scaler)
     assert (len(y_train), len(y_val)) == (30, 7)
-    assert y_val == [row["gasoline_price"] for row in rows[-7:]]
+    assert y_val == [row["diesel_price"] for row in rows[-7:]]
     assert max(y_train) < min(y_val)  # 시간순: 검증 타깃이 학습 타깃보다 모두 뒤
 
 

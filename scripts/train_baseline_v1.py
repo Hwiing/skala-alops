@@ -11,7 +11,7 @@ Day1에는 아직 MLflow가 등장하지 않으므로(Day2에서 도입), FastAP
 실행 순서:
     1) uvicorn serving_app.main:app --reload   (서버 먼저 기동 - lazy 모드라 데이터 없이도 뜹니다)
     2) 대시보드(http://localhost:8000/)에서 휘발유 CSV를 업로드하세요
-       (data/sample_gasoline_prices.csv를 예시로 업로드해볼 수 있습니다)
+       (data/sample_diesel_prices.csv를 예시로 업로드해볼 수 있습니다)
     3) python scripts/train_baseline_v1.py    (별도 터미널에서 - scaler.pkl 생성)
 """
 

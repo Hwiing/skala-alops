@@ -3,7 +3,7 @@
 
 오피넷 CSV저장 파일은 CP949 인코딩이고, 날짜가 "2026년09월26일"(국내 평균판매가격)이나
 "26년09월24일"(국제유가)처럼 한글 형식으로 들어 있습니다. 여기서 ISO 날짜와 숫자로
-정규화해 data/features.py의 공통 계약(date, gasoline_price, ...)에 맞춥니다.
+정규화해 data/features.py의 공통 계약(date, diesel_price, ...)에 맞춥니다.
 
 원본 파일은 data/raw/에 그대로 보존하고(커밋하지 않음), 변환은 항상 원본에서 다시
 수행해 같은 원본이면 같은 결과가 나오도록 합니다.
@@ -70,7 +70,7 @@ def parse_series(rows: list[dict], date_column: str, value_column: str) -> list[
 
 
 def load_opinet_gasoline(path: str, column: str = GASOLINE_COLUMN) -> list[dict]:
-    """오피넷 '국내유가통계 > 주유소 > 평균판매가격 > 제품별(일간)' CSV -> date, gasoline_price.
+    """오피넷 '국내유가통계 > 주유소 > 평균판매가격 > 제품별(일간)' CSV -> date, diesel_price.
 
     주유소 평균판매가격은 주말·공휴일에도 매일 집계되므로 날짜 누락은 원본 문제로 보고
     보간하지 않고 오류로 알린다.
@@ -84,7 +84,7 @@ def load_opinet_gasoline(path: str, column: str = GASOLINE_COLUMN) -> list[dict]
     for day, price in series:
         if price <= 0:
             raise ValueError(f"{day} 휘발유 가격이 양수가 아닙니다: {price}")
-    return [{"date": day.isoformat(), "gasoline_price": price} for day, price in series]
+    return [{"date": day.isoformat(), "diesel_price": price} for day, price in series]
 
 
 def main():
@@ -96,7 +96,7 @@ def main():
 
     raw_rows = read_csv_text(args.path)
     rows = load_opinet_gasoline(args.path)
-    prices = [row["gasoline_price"] for row in rows]
+    prices = [row["diesel_price"] for row in rows]
     print(f"원본 {len(raw_rows)}행 -> 변환 {len(rows)}행")
     print(
         f"기간 {rows[0]['date']} ~ {rows[-1]['date']}, 가격 {min(prices):.2f} ~ {max(prices):.2f}원/L"

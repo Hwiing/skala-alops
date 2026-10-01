@@ -1,22 +1,27 @@
 """
-Day1 -> Day3(시뮬레이션 엔드포인트 추가) 확장 파일.
-
-Day1: POST /predict - 최근 SEQ_LEN(20)일 시퀀스로 다음날 휘발유 가격 예측
-Day3: POST /predict/batch-test - 드리프트 감지 시뮬레이션 시작점 (scripts/simulate_drift.py 참고)
+POST /predict - 최근 120일(날짜 포함)로 다음 1~4주 경유 평균가 예측 (contracts.md v2)
+POST /predict/batch-test - 드리프트 감지 시뮬레이션 시작점 (scripts/simulate_drift.py 참고)
 """
+
+from datetime import date, timedelta
 
 from fastapi import APIRouter, HTTPException
 
-from data.features import FEATURE_COLUMNS, SEQ_LEN
+from data.diesel_features import INPUT_DAYS, WINDOWS
 from serving_app import model_loader
 from serving_app.monitoring import retrain_trigger
-from serving_app.monitoring.drift_detector import WINDOW_SIZE
-from serving_app.schemas import BatchTestRequest, BatchTestResponse, PredictRequest, PredictResponse
+from serving_app.schemas import (
+    PAIR_WINDOW,
+    BatchTestRequest,
+    BatchTestResponse,
+    PredictRequest,
+    PredictResponse,
+    WeekPrediction,
+)
 
 router = APIRouter()
 
-# Day3: 최근 예측 기록(actual/predicted)을 쌓아두는 슬라이딩 윈도우.
-# monitoring/drift_detector.py의 WINDOW_SIZE(21)만큼만 유지한다.
+# 최근 예측 짝({date, predicted[4], actual[4], naive})을 PAIR_WINDOW(28)건만 유지한다.
 # ponytail: 전역 리스트·잠금 없음(단일 사용자 시연용), 동시 배치 요청이 생기면 잠금 추가.
 recent_predictions: list[dict] = []
 
@@ -30,37 +35,56 @@ def _get_model_or_503():
         ) from exc
 
 
-def _pair_with_actual(model, rows: list[dict]) -> list[dict]:
-    """SEQ_LEN일 윈도우마다 다음날 가격을 예측하고 바로 다음 행 가격을 actual로 붙인다.
-
-    #28 주간 예측 전환 시 이 함수만 바꾼다(actual = 해당 주차 실제 주간평균).
-    """
-    target = FEATURE_COLUMNS[0]
+def _weeks(base: date, values: list[float]) -> list[WeekPrediction]:
+    """k주 = base+7(k−1)+1 ~ base+7k."""
     return [
-        {"predicted": model.predict_one(rows[i : i + SEQ_LEN]), "actual": rows[i + SEQ_LEN][target]}
-        for i in range(len(rows) - SEQ_LEN)
+        WeekPrediction(
+            horizon_week=k,
+            start_date=base + timedelta(days=w[0]),
+            end_date=base + timedelta(days=w[-1]),
+            predicted_avg_price=round(v, 2),
+        )
+        for k, (w, v) in enumerate(zip(WINDOWS, values), start=1)
     ]
+
+
+def _pair_with_actual(model, rows: list[dict]) -> list[dict]:
+    """rows[i:i+120]마다 1~4주를 예측하고, 기준일 뒤 k주 실제 평균·naive(기준일 가격)를 붙인다."""
+    prices = [r["diesel_price"] for r in rows]
+    pairs = []
+    for b in range(INPUT_DAYS - 1, len(rows) - 7 * len(WINDOWS)):
+        pairs.append(
+            {
+                "date": rows[b]["date"],
+                "predicted": [round(v, 2) for v in model.predict(rows[b - INPUT_DAYS + 1 : b + 1])],
+                "actual": [round(sum(prices[b + d] for d in w) / 7, 2) for w in WINDOWS],
+                "naive": prices[b],
+            }
+        )
+    return pairs
 
 
 @router.post("/predict", response_model=PredictResponse)
 def predict(req: PredictRequest):
     model = _get_model_or_503()
-    sequence = [p.model_dump() for p in req.sequence]
-    predicted_price = model.predict_one(sequence)
-    return PredictResponse(predicted_price=round(predicted_price, 2), model_version=model.version)
+    base = req.sequence[-1].date
+    values = model.predict([p.model_dump(mode="json") for p in req.sequence])
+    return PredictResponse(
+        predictions=_weeks(base, values), base_date=base, model_version=model.version
+    )
 
 
 @router.post("/predict/batch-test", response_model=BatchTestResponse)
 def batch_test(req: BatchTestRequest):
-    """rows를 20일 윈도우로 밀며 예측하고 AIOps 판정(check_and_trigger)을 돌려준다.
+    """기준일을 하루씩 밀며 1~4주를 예측하고 AIOps 판정(check_and_trigger)을 돌려준다.
 
-    재학습으로 새 버전이 승격되면 서버 모델을 교체하고(reload_model),
-    교체에 성공했을 때만 이전 모델의 예측 기록을 비운다(#14 역할 분담).
+    재학습으로 새 버전이 승격되면 그 버전을 서빙하도록 교체하고(reload_model),
+    실제로 그 버전이 올라왔을 때만 이전 모델의 예측 기록을 비운다(#14 역할 분담).
     """
     model = _get_model_or_503()
-    pairs = _pair_with_actual(model, [p.model_dump() for p in req.rows])
+    pairs = _pair_with_actual(model, [p.model_dump(mode="json") for p in req.rows])
     recent_predictions.extend(pairs)
-    del recent_predictions[:-WINDOW_SIZE]
+    del recent_predictions[:-PAIR_WINDOW]
 
     try:
         drift_check = retrain_trigger.check_and_trigger(recent_predictions)
@@ -68,10 +92,8 @@ def batch_test(req: BatchTestRequest):
         raise HTTPException(501, f"AIOps 판정 미구현: {exc}") from exc
 
     if drift_check.get("promoted"):
-        drift_check["reload"] = model_loader.reload_model()
+        drift_check["reload"] = model_loader.reload_model(drift_check.get("version"))
         if drift_check["reload"]["reloaded"]:
             recent_predictions.clear()
 
-    return BatchTestResponse(
-        predictions=[round(p["predicted"], 2) for p in pairs], drift_check=drift_check
-    )
+    return BatchTestResponse(predictions=pairs, drift_check=drift_check)

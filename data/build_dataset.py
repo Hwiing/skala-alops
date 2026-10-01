@@ -36,7 +36,7 @@ def build_rows(gasoline: list[dict], crude, fx, tax_periods) -> tuple[list[dict]
     days = [date.fromisoformat(row["date"]) for row in kept]
 
     columns = {
-        "crude_oil_price": asof_values(days, crude, CRUDE_LAG_DAYS),
+        "singapore_diesel_price": asof_values(days, crude, CRUDE_LAG_DAYS),
         "usd_krw": asof_values(days, fx, FX_LAG_DAYS),
         "tax_or_supply_feature": tax_cut_rates(days, tax_periods),
     }
