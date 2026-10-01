@@ -7,8 +7,8 @@ from data.features import SEQ_LEN
 
 class DailyPoint(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
-    gasoline_price: float = Field(gt=0, description="전국 평균 보통휘발유 원/L")
-    crude_oil_price: float = Field(gt=0, description="국제유가 USD/barrel")
+    diesel_price: float = Field(gt=0, description="전국 평균 보통휘발유 원/L")
+    singapore_diesel_price: float = Field(gt=0, description="국제유가 USD/barrel")
     usd_krw: float = Field(gt=0, description="KRW/USD")
     tax_or_supply_feature: float = Field(description="정의 확정 전 합성 예제는 0")
 

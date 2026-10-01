@@ -21,7 +21,7 @@
 - 원본 FastAPI, 대시보드, CSV 업로드, 로그 조회, Lazy/Eager 로더, LSTM 학습, MLflow 등록, Docker, AIOps 모듈 구조를 재사용합니다.
 - 최근 20일 × 4피처, 다음날 가격 출력, 원/L RMSE와 naive 비교 게이트를 연결했습니다.
 - 원본 핵심 TODO 5개는 담당자 구현 대상으로 남겼습니다. `/predict/batch-test`는 현재 **501**, 모델 준비 전 `/predict`는 **503**입니다. 정상 예측이나 자동 재학습이 완성된 상태가 아닙니다.
-- `data/sample_gasoline_prices.csv`는 **120일 합성 예제**입니다. 오피넷 실측 데이터 또는 성능 증빙으로 사용하지 않습니다.
+- `data/sample_diesel_prices.csv`는 **120일 합성 예제**입니다. 오피넷 실측 데이터 또는 성능 증빙으로 사용하지 않습니다.
 - MLflow는 별도 서버 없이 로컬 SQLite, Docker는 단일 컨테이너입니다.
 
 ## 실행
@@ -38,7 +38,7 @@ make run
 
 ```bash
 curl http://localhost:8000/health
-curl -F 'file=@data/sample_gasoline_prices.csv' http://localhost:8000/data/upload
+curl -F 'file=@data/sample_diesel_prices.csv' http://localhost:8000/data/upload
 curl http://localhost:8000/data/status
 ```
 

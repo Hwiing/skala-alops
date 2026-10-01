@@ -39,7 +39,7 @@ FX_CSV = (
 
 def gasoline(start="2023-01-06", days=6):
     return [
-        {"date": (D(start) + timedelta(days=i)).isoformat(), "gasoline_price": 1540.0 + i}
+        {"date": (D(start) + timedelta(days=i)).isoformat(), "diesel_price": 1540.0 + i}
         for i in range(days)
     ]
 
@@ -49,6 +49,14 @@ def test_crude_uses_previous_trading_day_only(tmp_path):
     days = [D("2023-01-06"), D("2023-01-07"), D("2023-01-08"), D("2023-01-09"), D("2023-01-10")]
     # 금요일은 목요일 값, 주말·월요일은 금요일 값, 화요일은 월요일 값
     assert asof_values(days, crude, lag_days=1) == [77.0, 76.0, 76.0, 76.0, 78.0]
+
+
+def test_crude_skips_closed_market_blank_and_rejects_wrong_unit(tmp_path):
+    blank = "기간,Dubai\r\n26년09월28일,95.0\r\n26년09월29일,\r\n26년09월30일,96.0\r\n"
+    assert len(load_opinet_crude(write(tmp_path, "blank.csv", blank))) == 2
+    wrong_unit = "기간,Dubai\r\n26년09월28일,818.38\r\n"
+    with pytest.raises(ValueError, match="USD/bbl"):
+        load_opinet_crude(write(tmp_path, "wrong.csv", wrong_unit))
 
 
 def test_fx_uses_same_day_and_carries_weekend_forward(tmp_path):
@@ -114,8 +122,8 @@ def test_build_rows_matches_contract(tmp_path):
     assert list(rows[0]) == ["date", *FEATURE_COLUMNS]
     assert rows[0] == {
         "date": "2023-01-06",
-        "gasoline_price": 1541.0,
-        "crude_oil_price": 77.0,
+        "diesel_price": 1541.0,
+        "singapore_diesel_price": 77.0,
         "usd_krw": 1268.2,
         "tax_or_supply_feature": 25.0,
     }

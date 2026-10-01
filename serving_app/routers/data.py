@@ -61,7 +61,7 @@ def status():
         return {"exists": False}
 
     rows = load_rows(path)
-    closes = [r["gasoline_price"] for r in rows]
+    closes = [r["diesel_price"] for r in rows]
     return {
         "exists": True,
         "filename": os.path.basename(path),

@@ -20,7 +20,7 @@ ENV MLFLOW_TRACKING_URI=sqlite:////app/runtime/mlflow.db
 ARG TRAIN_ON_BUILD=0
 RUN mkdir -p data/uploads serving_app/models runtime logs mlruns \
  && if [ "$TRAIN_ON_BUILD" = "1" ]; then \
-      cp data/sample_gasoline_prices.csv data/uploads/build_seed.csv && \
+      cp data/sample_diesel_prices.csv data/uploads/build_seed.csv && \
       python scripts/train_baseline_v1.py && \
       python serving_app/train_and_register.py; \
     fi

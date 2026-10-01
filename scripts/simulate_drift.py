@@ -27,7 +27,7 @@ API_URL = "http://localhost:8000/predict/batch-test"
 def compute_baseline_stats(csv_path: str | None = None) -> tuple[float, float]:
     """1단계: 학습에 사용한 데이터(업로드된 최신 CSV)의 평균·표준편차."""
     rows = load_rows(csv_path or latest_upload())
-    closes = np.array([r["gasoline_price"] for r in rows])
+    closes = np.array([r["diesel_price"] for r in rows])
     return float(closes.mean()), float(closes.std())
 
 
