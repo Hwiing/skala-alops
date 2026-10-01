@@ -16,26 +16,33 @@ import pickle
 
 SEQ_LEN = 20
 FEATURE_COLUMNS = ("diesel_price", "singapore_diesel_price", "usd_krw", "tax_or_supply_feature")
+# 기존 휘발유·두바이유 경로(v1) 전용 별도 계약. 경유 업로드·학습에 쓰면 diesel_price 누락으로 거부된다.
+LEGACY_GASOLINE_COLUMNS = (
+    "gasoline_price",
+    "dubai_crude_price",
+    "usd_krw",
+    "tax_or_supply_feature",
+)
 
 
-def validate_rows(rows: list[dict]) -> list[dict]:
-    """공통 정규화 CSV 계약. 오피넷 원본 변환/외부 지표 병합은 데이터 담당 TODO."""
+def validate_rows(rows: list[dict], columns: tuple[str, ...] = FEATURE_COLUMNS) -> list[dict]:
+    """정규화 CSV 계약(기본 = 경유 공통 계약). 기존 휘발유 경로는 LEGACY_GASOLINE_COLUMNS로 따로 검사한다."""
     from datetime import date, timedelta
     from math import isfinite
 
     result = []
     previous = None
     for row in rows:
-        missing = [key for key in ("date", *FEATURE_COLUMNS) if row.get(key) in (None, "")]
+        missing = [key for key in ("date", *columns) if row.get(key) in (None, "")]
         if missing:
             raise ValueError(f"필수 값이 비어 있습니다: {missing} (행: {row.get('date')})")
         day = date.fromisoformat(row["date"])
         if previous is not None and day != previous + timedelta(days=1):
             raise ValueError("date는 중복/누락 없이 하루 간격 오름차순이어야 합니다")
-        point = {key: float(row[key]) for key in FEATURE_COLUMNS}
+        point = {key: float(row[key]) for key in columns}
         if not all(isfinite(value) for value in point.values()):
             raise ValueError("피처에 NaN/Infinity를 사용할 수 없습니다")
-        if any(point[key] <= 0 for key in FEATURE_COLUMNS[:3]):
+        if any(point[key] <= 0 for key in columns[:3]):
             raise ValueError("가격과 환율은 양수여야 합니다")
         result.append({"date": day.isoformat(), **point})
         previous = day

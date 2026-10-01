@@ -1,5 +1,8 @@
 """
-원본 3종 + 유류세 구간표 -> 학습·업로드용 정규화 CSV (date + FEATURE_COLUMNS).
+[기존 휘발유 v1 경로] 원본 3종 + 유류세 구간표 -> 휘발유 정규화 CSV (date + LEGACY_GASOLINE_COLUMNS).
+
+경유 학습·업로드(계약 v2)에는 쓰지 않는다: 출력 컬럼이 gasoline_price·dubai_crude_price라
+경유 공통 계약 검사(diesel_price 필수)에서 거부된다. 경유는 data.build_diesel_dataset을 쓴다.
 
     .venv/bin/python -m data.build_dataset \\
         --gasoline data/raw/opinet_gasoline.csv \\
@@ -24,7 +27,7 @@ from data.external import (
     load_usd_krw,
     tax_cut_rates,
 )
-from data.features import FEATURE_COLUMNS, validate_rows
+from data.features import LEGACY_GASOLINE_COLUMNS, validate_rows
 from data.opinet import load_opinet_gasoline
 
 DEFAULT_OUT = "data/processed/gasoline_features.csv"
@@ -36,7 +39,7 @@ def build_rows(gasoline: list[dict], crude, fx, tax_periods) -> tuple[list[dict]
     days = [date.fromisoformat(row["date"]) for row in kept]
 
     columns = {
-        "singapore_diesel_price": asof_values(days, crude, CRUDE_LAG_DAYS),
+        "dubai_crude_price": asof_values(days, crude, CRUDE_LAG_DAYS),
         "usd_krw": asof_values(days, fx, FX_LAG_DAYS),
         "tax_or_supply_feature": tax_cut_rates(days, tax_periods),
     }
@@ -44,14 +47,16 @@ def build_rows(gasoline: list[dict], crude, fx, tax_periods) -> tuple[list[dict]
         {**row, **{name: values[i] for name, values in columns.items()}}
         for i, row in enumerate(kept)
     ]
-    # 공통 계약(하루 간격·양수·유한값)을 업로드 라우터와 같은 함수로 한 번 더 확인한다.
-    validated = validate_rows([{k: str(v) for k, v in row.items()} for row in rows])
+    # 하루 간격·양수·유한값을 같은 검사 함수로 확인하되, 휘발유 전용 컬럼으로 검사한다.
+    validated = validate_rows(
+        [{k: str(v) for k, v in row.items()} for row in rows], LEGACY_GASOLINE_COLUMNS
+    )
     return validated, len(gasoline) - len(kept)
 
 
 def write_rows(rows: list[dict], path: str):
     with open(path, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["date", *FEATURE_COLUMNS])
+        writer = csv.DictWriter(f, fieldnames=["date", *LEGACY_GASOLINE_COLUMNS])
         writer.writeheader()
         writer.writerows(rows)
 
