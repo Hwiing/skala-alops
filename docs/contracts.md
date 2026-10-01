@@ -17,9 +17,9 @@ v2가 합의·구현되기 전까지 실제 코드는 아래 **v1(휘발유 다�
 | 모델 | `GasolinePricePredictor`(Keras) | `DieselPricePredictor`, MLflow pyfunc 1개(LSTM + scaler + 정책 규칙). **`predict(df)`**: 입력 DataFrame 1건 = 최근 120행(`date` + 피처 4개, 오래된 날 → 최근 날), 출력 = 1~4주 평균가 float 4개(원/L, 1주차부터) | 소영 → 준형 |
 | 모델 주소 | `models:/GasolinePricePredictor/Production` | 승격 시 stage `Production`과 alias `champion`을 같은 버전에 같이 붙임 → `models:/DieselPricePredictor/Production` = `models:/DieselPricePredictor@champion`. `MODEL_SOURCE=local`은 `mlflow.pyfunc.load_model("serving_app/models/diesel_pyfunc")`로 같은 방식으로 읽음 | 소영·준형 |
 | naive | 직전 날 가격 | 마지막 입력일 가격을 1~4주 모두에 사용 | 소영 |
-| 배포 게이트 | `RMSE ≤ 10 AND RMSE < naive` | **1주차 `RMSE ≤ 50` AND 1~4주 모두 `RMSE < naive_rmse` AND 1주차 `RMSE ≤ Production RMSE`**(Production이 있을 때, 같은 검증 구간). 비유한 값 거부 | 소영·동찬 |
+| 배포 게이트 | `RMSE ≤ 10 AND RMSE < naive` | **1주차 `RMSE ≤ 50` AND 1~4주 모두 `RMSE < naive_rmse` AND 1~4주 평균 `RMSE ≤ Production 1~4주 평균 RMSE`**(Production이 있을 때, 같은 검증 구간). 비유한 값 거부 | 소영·동찬 |
 | 드리프트 (제안) | 최근 21건 RMSE > 10 | 정답이 확보된 최근 28일의 **1주차 RMSE > 같은 기간 naive RMSE**(1주차 정답은 7일 뒤 확보) | 동찬 |
-| fine-tuning | 최근 30일, 80:20 분할 | **저장된 전체 데이터의 최근 565행**으로 호출(업로드분만으로는 부족할 수 있음). 최근 365일 학습(Production warm start, scaler 재fit 금지), 학습에 쓰지 않은 최근 28일 검증, 게이트 동일. 반환 `{promoted, rmse, naive_rmse, version?, status}`, `status` = `promoted`·`gate_failed`·`no_production`, 565행 미만은 `ValueError("insufficient_data")` | 소영 → 동찬 |
+| fine-tuning | 최근 30일, 80:20 분할 | **저장된 전체 데이터의 최근 627행**으로 호출(업로드분만으로는 부족할 수 있음). 최근 365일 학습(Production warm start, scaler 재fit 금지), 학습에 쓰지 않은 최근 90일 검증, 게이트 동일. 반환 `{promoted, rmse, naive_rmse, version?, status}`, `status` = `promoted`·`gate_failed`·`no_production`, 627행 미만은 `ValueError("insufficient_data")` | 소영 → 동찬 |
 | 배치·업로드 최소 행 | 41행, `rows[i:i+20]` | **175행**(입력 120 + 짝 28건 − 1 + 4주 정답 28), `rows[i:i+120]` 예측 → 다음 1~4주 실제 평균과 비교, 최근 28건으로 드리프트 판정. AIOps에 넘기는 짝(제안): `{date, predicted[4], actual[4], naive}`, naive = 마지막 입력일 가격 | 준형·동찬 |
 
 게이트 수치 근거
