@@ -13,7 +13,7 @@
 | 모델 | 내부 28일 × 8피처 LSTM·scaler·정책 규칙을 포함한 MLflow pyfunc |
 | 데이터 공급 | 자동차용경유·싱가포르 경유·ECOS 환율·경유 유류세 |
 | 배포 게이트 | 1주 RMSE ≤ 50, 4주 각각 naive보다 우수, 4주 평균 RMSE ≤ Production |
-| 드리프트 계약 | 정답이 확보된 최근 28개 기준일의 1주 RMSE > 같은 기간 naive RMSE |
+| 드리프트 계약 | 정답이 확보된 최근 28개 기준일의 1주 RMSE > max(같은 기간 naive RMSE, 10원/L) |
 | 재학습 | 최근 627행, Production warm start·365일 학습·독립 90일 검증 |
 | 이해관계자 | 운송·물류회사 |
 
@@ -21,10 +21,11 @@
 
 - 날짜·양수/유한값·연속성 검증, 120일 예측 API, 175행 배치와 주간 정답 연결, pyfunc 로더를 구현했습니다.
 - Registry 승격 버전과 실제 서빙 버전이 일치할 때만 교체 성공으로 표시하고 예측 기록을 비웁니다.
-- 모델 미준비는 503입니다. 배치는 드리프트 판정 → 재학습 → 게이트 → 운영자 알림까지 연결됐습니다. 실시간 `/predict` 기록·지연 정답 적재와 업로드 데이터의 재학습 반영은 아직 없습니다.
+- 모델 미준비는 503입니다. 배치와 실시간 예측의 지연 정답 적재 모두 드리프트 판정 → 재학습 → 게이트 → 운영자 알림으로 연결됩니다. 재학습은 설정 CSV·업로드 중 최소 627행이며 마지막 날짜가 가장 최근인 데이터를 사용합니다.
+- 운영자 알림은 `logs/alerts.jsonl` 수신함에 기본 저장되며 `/logs/alerts.jsonl`로 확인합니다. 웹훅은 선택 설정입니다. Registry 승격과 실제 서빙 교체 성공·실패를 별도로 알립니다.
 - `data/sample_diesel_prices.csv`는 **120일 합성 예제**입니다. 175행 업로드나 실제 학습 성능 증빙으로 쓰지 않습니다.
 - `examples/predict.json`, `examples/batch-test.json`도 API 계약 확인용 합성 요청입니다.
-- MLflow는 별도 서버 없이 로컬 SQLite, Docker는 단일 컨테이너입니다. 영속 볼륨·UI 후속 PR 통합 검증은 별도입니다.
+- MLflow는 별도 서버 없이 로컬 SQLite, Docker는 단일 컨테이너입니다. 합성 데이터·실제 TensorFlow/MLflow의 자동 승격·서빙 교체 재현과 운영 제한은 [AIOps 검증 기록](docs/evidence/aiops_recovery_and_promotion.md)을 참고하세요.
 
 ## 실행
 
