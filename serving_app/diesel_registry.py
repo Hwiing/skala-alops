@@ -213,7 +213,7 @@ def _fit_initial(csv_path: str, holdout_days: int, seeds, synthetic: bool):
 def train_initial(
     csv_path: str = DEFAULT_CSV, holdout_days: int = 365, seeds=(42, 7, 2026), synthetic=False
 ):
-    """대시보드 초기 학습: 학습·독립 검증·MLflow 저장만 수행한다."""
+    """학습·독립 검증·MLflow 저장 전용 함수. 배포는 train_and_register()를 사용한다."""
     forecaster, _, _, meta = _fit_initial(csv_path, holdout_days, seeds, synthetic)
     with mlflow.start_run(run_name="diesel-initial-train") as run:
         mlflow.set_tags({"workflow": "initial-training", "training_only": "true"})
@@ -229,7 +229,7 @@ def train_initial(
 def train_and_register(
     csv_path: str = DEFAULT_CSV, holdout_days: int = 365, seeds=(42, 7, 2026), synthetic=False
 ):
-    """기존 운영자 CLI의 초기 학습·게이트·등록 경로."""
+    """대시보드와 운영자 CLI의 초기 학습·게이트·등록 경로."""
     forecaster, frame, val_idx, meta = _fit_initial(csv_path, holdout_days, seeds, synthetic)
     return log_and_gate(forecaster, frame, val_idx, meta, run_name="diesel-base-train")
 

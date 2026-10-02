@@ -21,7 +21,7 @@ RUN mkdir -p data/uploads data/processed serving_app/models runtime logs mlruns
 
 EXPOSE 8000
 
-ENV MODEL_SOURCE=local
+ENV MODEL_SOURCE=mlflow
 ENV LOADING_MODE=lazy
 
 CMD ["uvicorn", "serving_app.main:app", "--host", "0.0.0.0", "--port", "8000"]

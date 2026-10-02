@@ -1,4 +1,4 @@
-# 단일 컨테이너. 기본은 lazy/local: 모델이 없어도 서버는 뜨고 /predict만 503.
+# 단일 컨테이너. 기본은 lazy/mlflow: 모델이 없어도 서버는 뜨고 /predict만 503.
 # 런타임 데이터는 이름 있는 볼륨에 둔다 - `down`/재빌드 후에도 남고, `down -v`로만 지워진다.
 # 호스트 mlflow.db는 공유하지 않는다(아티팩트 경로가 호스트 절대경로라 컨테이너에서 못 찾음).
 services:
@@ -9,7 +9,7 @@ services:
     ports: ["8000:8000"]
     restart: unless-stopped
     environment:
-      MODEL_SOURCE: ${MODEL_SOURCE:-local}
+      MODEL_SOURCE: ${MODEL_SOURCE:-mlflow}
       LOADING_MODE: ${LOADING_MODE:-lazy}
       MLFLOW_TRACKING_URI: sqlite:////app/runtime/mlflow.db
       AIOPS_ALERT_WEBHOOK_URL: ${AIOPS_ALERT_WEBHOOK_URL:-}

@@ -1,4 +1,4 @@
-"""업로드 CSV의 초기 학습 작업. 학습·MLflow 기록만 수행하며 AIOps와 동시 학습을 막는다."""
+"""업로드 CSV의 초기 학습 작업. 학습·검증·배포를 수행하며 AIOps와 동시 학습을 막는다."""
 
 import logging
 import os
@@ -11,8 +11,10 @@ from fastapi import APIRouter, HTTPException
 from data.contracts import FINETUNE_MIN_ROWS, INPUT_DAYS, TARGET_DAYS
 from data.diesel_features import load_diesel_rows
 from data.storage import latest_upload
+from serving_app import model_loader
 from serving_app.monitoring import retrain_trigger
-from serving_app.schemas import TrainingJob, TrainingRequest, TrainingResult
+from serving_app.routers import predict
+from serving_app.schemas import ReloadResult, TrainingJob, TrainingRequest, TrainingResult
 
 router = APIRouter(prefix="/training")
 logger = logging.getLogger("aiops")
@@ -27,14 +29,25 @@ def _now() -> str:
 def _train(path: str, holdout_days: int) -> dict:
     import mlflow
 
-    from serving_app.diesel_registry import train_initial
+    from serving_app.diesel_registry import train_and_register
 
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db"))
-    return train_initial(
+    result = train_and_register(
         path,
         holdout_days=holdout_days,
         synthetic=os.getenv("DIESEL_DATA_SYNTHETIC", "false").lower() == "true",
     )
+
+    return {**result, "model_uri": f"runs:/{result['run_id']}/model"}
+
+
+def _swap(result: TrainingResult) -> None:
+    result.reload = ReloadResult.model_validate(model_loader.reload_model(result.version))
+    TrainingResult.model_validate(result.model_dump())
+    if result.reload.reloaded:
+        predict.recent_predictions.clear()
+        predict._judgement_pending = False
+        retrain_trigger.reset_state()
 
 
 def _run(path: str, holdout_days: int) -> None:
@@ -42,6 +55,8 @@ def _run(path: str, holdout_days: int) -> None:
     try:
         logger.info("[INFO] initial training started: %s", os.path.basename(path))
         result = TrainingResult.model_validate(_train(path, holdout_days))
+        if result.promoted:
+            _swap(result)
         with _state_lock:
             _job = _job.model_copy(
                 update={"state": "completed", "finished_at": _now(), "result": result}
@@ -98,3 +113,21 @@ def start(req: TrainingRequest):
             )
         raise
     return response
+
+
+@router.post("/reload", response_model=TrainingJob)
+def retry_reload():
+    """초기 학습으로 승격된 동일 버전의 서빙 로드만 재시도한다."""
+    if not retrain_trigger._retrain_lock.acquire(blocking=False):
+        raise HTTPException(409, "학습이 진행 중입니다.")
+    try:
+        with _state_lock:
+            job = _job.model_copy(deep=True)
+        if job.state != "completed" or not job.result or not job.result.promoted:
+            raise HTTPException(409, "교체할 승격 모델이 없습니다.")
+        _swap(job.result)
+        with _state_lock:
+            _job.result = job.result
+            return _job.model_copy(deep=True)
+    finally:
+        retrain_trigger._retrain_lock.release()

@@ -42,7 +42,7 @@ app.include_router(data.router)  # 경유 데이터 업로드
 app.include_router(logs.router)  # 대시보드: 재학습 로그 파일 조회
 app.include_router(models.router)  # 레지스트리 버전·재학습 이력 조회 API
 app.include_router(metrics.router)  # 요청 수·응답 시간·성공률 조회 API
-app.include_router(training.router)  # 시뮬레이터: 초기 학습·MLflow 기록 작업
+app.include_router(training.router)  # 시뮬레이터: 초기 학습·검증·배포 작업
 
 
 @app.middleware("http")

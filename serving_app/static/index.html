@@ -322,9 +322,10 @@
 
   <section class="section" aria-labelledby="train-title">
     <div class="section-head">
-      <h2 class="t-title" id="train-title">02 · 모델 학습</h2>
+      <h2 class="t-title" id="train-title">02 · 초기 모델 학습·배포</h2>
       <div class="actions">
-        <button class="btn btn-primary" id="train-btn" type="button" disabled><span class="spinner"></span><span class="label">초기 모델 학습</span></button>
+        <button class="btn btn-primary" id="train-btn" type="button" disabled><span class="spinner"></span><span class="label">초기 학습·배포</span></button>
+        <button class="btn btn-secondary" id="reload-btn" type="button" hidden><span class="spinner"></span><span class="label">배포 모델 로드 재시도</span></button>
       </div>
     </div>
     <div id="training-result"><p class="empty">학습할 CSV를 먼저 업로드하세요.</p></div>
@@ -809,11 +810,12 @@ let trainingRunning = false;
 let trainingPoll = null;
 
 function updateControls() {
-  const operationBusy = trainingRunning || ["upload-btn", "send-btn", "drift-btn", "train-btn"].some(id => $(id).getAttribute("aria-busy") === "true");
+  const operationBusy = trainingRunning || ["upload-btn", "send-btn", "drift-btn", "train-btn", "reload-btn"].some(id => $(id).getAttribute("aria-busy") === "true");
   $("train-btn").disabled = operationBusy || $("train-btn").getAttribute("aria-busy") === "true" || previewCount < 627;
   $("repeat-predict-btn").disabled = operationBusy || $("repeat-predict-btn").getAttribute("aria-busy") === "true" || !driftSequence;
   $("send-btn").disabled = operationBusy || $("send-btn").getAttribute("aria-busy") === "true";
   $("drift-btn").disabled = operationBusy;
+  $("reload-btn").disabled = operationBusy;
   $("upload-btn").disabled = operationBusy || $("upload-btn").getAttribute("aria-busy") === "true" || !$("upload-input").files.length;
 }
 async function loadPreview() {
@@ -843,27 +845,32 @@ function gateTable(result, caption = "배포 게이트 검증 · 원/L") {
 }
 function renderTraining(job) {
   trainingRunning = job.state === "running";
-  setBusy($("train-btn"), trainingRunning, trainingRunning ? "학습 중…" : "초기 모델 학습");
+  setBusy($("train-btn"), trainingRunning, trainingRunning ? "학습·배포 중…" : "초기 학습·배포");
+  $("reload-btn").hidden = !(job.result?.promoted && job.result.reload?.reloaded === false);
   updateControls();
   const box = $("training-result");
   if (job.state === "idle") {
-    box.innerHTML = `<p class="empty">초기 학습에는 627행 이상이 필요합니다. 학습한 모델과 검증 지표를 MLflow에 저장합니다.</p>`;
+    box.innerHTML = `<p class="empty">627행 이상으로 학습·검증하고, 배포 기준을 통과하면 예측 모델로 반영합니다.</p>`;
     return;
   }
   const source = `${job.filename} · ${job.rows.toLocaleString("ko-KR")}행 · 검증 ${job.holdout_days}일`;
   if (trainingRunning) {
-    box.innerHTML = `<div class="job-status"><span class="dot"></span><strong>초기 모델 학습 중</strong></div><p class="t-caption">${esc(source)}</p>`;
+    box.innerHTML = `<div class="job-status"><span class="dot"></span><strong>초기 모델 학습·배포 중</strong></div><p class="t-caption">${esc(source)}</p>`;
     return;
   }
   if (job.state === "failed") { box.innerHTML = flowError(`학습 실패: ${job.error}`); return; }
   const r = job.result;
-  box.innerHTML = `<div class="job-status"><span class="dot ok"></span><strong>초기 모델 학습 완료</strong></div>
+  const deployed = r.promoted && r.reload?.reloaded;
+  const title = deployed ? `초기 모델 학습·배포 완료 · ${r.reload.version}` : r.promoted ? "모델 등록 완료 · 서빙 로드 재시도 필요" : "학습 완료 · 배포 기준 미충족";
+  box.innerHTML = `<div class="job-status"><span class="dot ${deployed ? "ok" : "warn"}"></span><strong>${esc(title)}</strong></div>
     <p class="t-caption">${esc(source)} · MLflow run ${esc(r.run_id)}</p>
     <div class="weeks-wrap"><table class="weeks">
       <caption>초기 모델 검증 · 원/L</caption>
       <thead><tr><th>주차</th><th>모델 RMSE</th><th>naive RMSE</th></tr></thead>
       <tbody>${r.rmse.map((v, i) => `<tr><td>${i + 1}주차</td><td class="${v >= r.naive_rmse[i] ? "worse" : ""}">${fmt(v)}</td><td>${fmt(r.naive_rmse[i])}</td></tr>`).join("")}</tbody>
-    </table></div>`;
+    </table></div>
+    ${r.reasons.length ? `<p class="t-sub">${esc(r.reasons.join(" · "))}</p>` : ""}
+    ${r.reload?.error ? flowError(r.reload.error) : ""}`;
 }
 async function loadTraining() {
   clearTimeout(trainingPoll);
@@ -878,7 +885,7 @@ async function loadTraining() {
   }
 }
 async function startTraining() {
-  setBusy($("train-btn"), true, "학습 시작 중…");
+  setBusy($("train-btn"), true, "학습·배포 시작 중…");
   updateControls();
   try {
     const job = await postJSON("/training/start", { holdout_days: 365 });
@@ -886,9 +893,16 @@ async function startTraining() {
     trainingPoll = setTimeout(loadTraining, 1000);
   } catch (e) {
     $("training-result").innerHTML = flowError(e.message);
-    setBusy($("train-btn"), false, "초기 모델 학습");
+    setBusy($("train-btn"), false, "초기 학습·배포");
     updateControls();
   }
+}
+async function retryInitialReload() {
+  setBusy($("reload-btn"), true, "배포 모델 로드 중…");
+  updateControls();
+  try { renderTraining(await postJSON("/training/reload", {})); await loadHealth(); }
+  catch (e) { $("training-result").innerHTML = flowError(e.message); }
+  finally { setBusy($("reload-btn"), false, "배포 모델 로드 재시도"); updateControls(); }
 }
 async function repeatPrediction() {
   if (!driftSequence) return;
@@ -934,6 +948,7 @@ function arrowNav(list, select) {
 $("send-btn").addEventListener("click", () => sendScenario("normal"));
 $("drift-btn").addEventListener("click", () => sendScenario("drift"));
 $("train-btn").addEventListener("click", startTraining);
+$("reload-btn").addEventListener("click", retryInitialReload);
 $("repeat-predict-btn").addEventListener("click", repeatPrediction);
 $("pick-btn").addEventListener("click", () => $("upload-input").click());
 $("upload-input").addEventListener("change", onFileChange);

@@ -217,13 +217,24 @@ class TrainingRequest(ContractModel):
     holdout_days: int = Field(default=365, ge=30, le=3650)
 
 
-class TrainingResult(ContractModel):
-    """초기 학습 결과. 배포 게이트·등록·승격·서빙 교체는 포함하지 않는다."""
+class TrainingResult(RetrainMetrics):
+    """초기 학습의 게이트·배포 결과. 실제 로드한 버전까지 확인한다."""
 
     rmse: RmseVector
     naive_rmse: RmseVector
+    passed: bool
     run_id: str
     model_uri: str
+    reload: ReloadResult | None = None
+
+    @model_validator(mode="after")
+    def verified_deployment(self):
+        if self.reload is not None and not self.promoted:
+            raise ValueError("서빙 교체 결과는 승격 뒤에만 기록합니다")
+        if self.reload and self.reload.reloaded:
+            if self.reload.version != f"champion:{self.version}":
+                raise ValueError("서빙 버전은 승격 버전과 일치해야 합니다")
+        return self
 
 
 class TrainingJob(ContractModel):
