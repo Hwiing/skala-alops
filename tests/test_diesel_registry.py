@@ -4,6 +4,7 @@ FineTuneResult·DriftCheck는 version을 문자열로 받으므로 int가 새면
 mlflow·tensorflow가 필요한 모듈이라 requirements-dev만 설치한 CI에서는 건너뛴다.
 """
 
+from contextlib import nullcontext
 from types import SimpleNamespace
 
 import pytest
@@ -64,3 +65,35 @@ def test_fine_tune_records_actual_learning_rate(monkeypatch):
     assert seen["meta"]["learning_rate"] == 5e-4
     assert seen["meta"]["epochs"] == [20]
     assert seen["meta"]["base_version"] == "1"
+
+
+def test_initial_training_only_logs_and_never_evaluates_or_promotes(monkeypatch):
+    meta = {"rmse": [100.0] * 4, "naive_rmse": [2.0] * 4}
+    forecaster = object()
+    seen = {}
+    monkeypatch.setattr(
+        diesel_registry, "_fit_initial", lambda *args: (forecaster, object(), [1], meta)
+    )
+    monkeypatch.setattr(
+        diesel_registry.mlflow,
+        "start_run",
+        lambda **kwargs: nullcontext(SimpleNamespace(info=SimpleNamespace(run_id="initial-run"))),
+    )
+    monkeypatch.setattr(diesel_registry.mlflow, "set_tags", lambda tags: seen.update(tags))
+    monkeypatch.setattr(diesel_registry, "_log_training", lambda model, info: "models:/logged-only")
+    monkeypatch.setattr(
+        diesel_registry,
+        "check_gate",
+        lambda *args: pytest.fail("initial training evaluated a gate"),
+    )
+    monkeypatch.setattr(
+        diesel_registry, "MlflowClient", lambda: pytest.fail("initial training accessed registry")
+    )
+    result = diesel_registry.train_initial("uploaded.csv")
+    assert result == {
+        "rmse": [100.0] * 4,
+        "naive_rmse": [2.0] * 4,
+        "run_id": "initial-run",
+        "model_uri": "models:/logged-only",
+    }
+    assert seen == {"workflow": "initial-training", "training_only": "true"}

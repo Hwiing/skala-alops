@@ -2,11 +2,11 @@
 FastAPI 앱 진입점.
 
 Day1: app 생성, 라우터(predict, health) 등록, startup 이벤트에서 로딩 모드에 따라 모델 준비
-Day2: data 라우터 등록 (휘발유 데이터 업로드)
+Day2: data 라우터 등록 (경유 데이터 업로드)
 Day3: "aiops" 로거를 logs/aiops.log 파일로 연결(로깅 설정) + logs 라우터(로그 파일 조회) 등록
 
 정적 대시보드: serving_app/static/index.html 이 /health · /predict · /predict/batch-test ·
-/data/upload · /logs · /models · /metrics/summary 를 호출하는 확인용 화면입니다. API 라우터를 먼저 등록한 뒤
+/data/upload · /data/preview · /training · /predict/evaluate · /logs 를 호출하는 시뮬레이터입니다. API 라우터를 먼저 등록한 뒤
 StaticFiles를 "/"에 마지막으로 mount해야, /predict 같은 API 경로가 정적 파일보다
 먼저 매칭됩니다(Starlette는 등록 순서대로 라우트를 검사합니다).
 """
@@ -19,7 +19,7 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
 from serving_app import model_loader
-from serving_app.routers import data, health, logs, metrics, models, predict
+from serving_app.routers import data, health, logs, metrics, models, predict, training
 
 # monitoring/retrain_trigger.py가 쓰는 "aiops" 로거를 logs/aiops.log 파일에 연결한다.
 # (routers/logs.py가 같은 디렉토리를 읽기 전용으로 노출한다.) 여기서 이 로거 하나만
@@ -38,10 +38,11 @@ app = FastAPI(title="경유 주간 예측 Serving & AIOps")
 
 app.include_router(predict.router)
 app.include_router(health.router)
-app.include_router(data.router)  # 휘발유 데이터 업로드
+app.include_router(data.router)  # 경유 데이터 업로드
 app.include_router(logs.router)  # 대시보드: 재학습 로그 파일 조회
-app.include_router(models.router)  # 대시보드: 레지스트리 버전·재학습 이력
-app.include_router(metrics.router)  # 대시보드: 요청 수·응답 시간·성공률
+app.include_router(models.router)  # 레지스트리 버전·재학습 이력 조회 API
+app.include_router(metrics.router)  # 요청 수·응답 시간·성공률 조회 API
+app.include_router(training.router)  # 시뮬레이터: 초기 학습·검증·배포 작업
 
 
 @app.middleware("http")

@@ -110,6 +110,39 @@ def file_sha256(path: str) -> str:
         return hashlib.sha256(f.read()).hexdigest()
 
 
+def _log_training(forecaster, meta: dict) -> str:
+    """현재 MLflow run에 학습 지표·모델을 기록한다. 배포 판단과 등록은 수행하지 않는다."""
+    mlflow.log_params(
+        {
+            "mode": meta.get("mode", "scratch"),
+            "data": meta["data"],
+            "data_sha256": meta["data_sha256"],
+            "data_period": " ~ ".join(meta["data_period"]),
+            "rows": meta["rows"],
+            "synthetic": meta.get("synthetic", False),
+            "features": ",".join(FEATURES),
+            "seq_len": SEQ_LEN,
+            "input_days": INPUT_DAYS,
+            "seeds": ",".join(map(str, meta["seeds"])),
+            "epochs": ",".join(map(str, meta["epochs"])),
+            "learning_rate": meta["learning_rate"],
+            "base_version": meta.get("base_version", "none"),
+            "train_target_period": " ~ ".join(meta["train_target_period"]),
+            "validation_period": " ~ ".join(meta["validation_period"]),
+            "policy_pass_day0": PASS_DAY0,
+            "policy_pass_days": PASS_DAYS,
+        }
+    )
+    for k, (m, n) in enumerate(zip(meta["rmse"], meta["naive_rmse"]), start=1):
+        mlflow.log_metrics({f"rmse_w{k}": m, f"naive_rmse_w{k}": n})
+    with tempfile.TemporaryDirectory() as tmp:
+        forecaster.save(tmp, meta)
+        model = mlflow.pyfunc.log_model(
+            name="model", python_model=DieselPyfunc(), artifacts={"model_dir": tmp}
+        )
+    return model.model_uri
+
+
 def log_and_gate(forecaster, frame, val_idx, meta: dict, run_name: str) -> dict:
     """같은 검증 구간으로 Production을 재평가해 게이트 판단 → 기록 → 통과 시 등록·승격. #11 fine-tuning도 사용."""
     client = MlflowClient()
@@ -127,31 +160,7 @@ def log_and_gate(forecaster, frame, val_idx, meta: dict, run_name: str) -> dict:
     }
     with mlflow.start_run(run_name=run_name) as run:
         result["run_id"] = run.info.run_id
-        mlflow.log_params(
-            {
-                "mode": meta.get("mode", "scratch"),
-                "data": meta["data"],
-                "data_sha256": meta["data_sha256"],
-                "data_period": " ~ ".join(meta["data_period"]),
-                "rows": meta["rows"],
-                "synthetic": meta.get("synthetic", False),
-                "features": ",".join(FEATURES),
-                "seq_len": SEQ_LEN,
-                "input_days": INPUT_DAYS,
-                "seeds": ",".join(map(str, meta["seeds"])),
-                "epochs": ",".join(map(str, meta["epochs"])),
-                "learning_rate": meta["learning_rate"],
-                "base_version": meta.get("base_version", "none"),
-                "train_target_period": " ~ ".join(meta["train_target_period"]),
-                "validation_period": " ~ ".join(meta["validation_period"]),
-                "policy_pass_day0": PASS_DAY0,
-                "policy_pass_days": PASS_DAYS,
-                "gate_week1_max": WEEK1_RMSE_MAX,
-                "production_before": before or "none",
-            }
-        )
-        for k, (m, n) in enumerate(zip(meta["rmse"], meta["naive_rmse"]), start=1):
-            mlflow.log_metrics({f"rmse_w{k}": m, f"naive_rmse_w{k}": n})
+        mlflow.log_params({"gate_week1_max": WEEK1_RMSE_MAX, "production_before": before or "none"})
         for k, v in enumerate(production_rmse or [], start=1):
             mlflow.log_metric(f"production_rmse_w{k}", v)
         mlflow.set_tags(
@@ -160,11 +169,7 @@ def log_and_gate(forecaster, frame, val_idx, meta: dict, run_name: str) -> dict:
                 "gate_reasons": "; ".join(gate["reasons"]),
             }
         )
-        with tempfile.TemporaryDirectory() as tmp:
-            forecaster.save(tmp, meta)
-            mlflow.pyfunc.log_model(
-                name="model", python_model=DieselPyfunc(), artifacts={"model_dir": tmp}
-            )
+        _log_training(forecaster, meta)
         if gate["passed"]:
             v = mlflow.register_model(f"runs:/{run.info.run_id}/model", MODEL_NAME)
             client.transition_model_version_stage(
@@ -186,9 +191,7 @@ def log_and_gate(forecaster, frame, val_idx, meta: dict, run_name: str) -> dict:
     return result
 
 
-def train_and_register(
-    csv_path: str = DEFAULT_CSV, holdout_days: int = 365, seeds=(42, 7, 2026), synthetic=False
-):
+def _fit_initial(csv_path: str, holdout_days: int, seeds, synthetic: bool):
     rows = load_diesel_rows(csv_path)
     frame = DailyFrame(rows)
     train_idx, val_idx = split_holdout(frame, holdout_days)
@@ -204,6 +207,30 @@ def train_and_register(
         **evaluate(forecaster, frame, val_idx),
     }
     print(report(meta))
+    return forecaster, frame, val_idx, meta
+
+
+def train_initial(
+    csv_path: str = DEFAULT_CSV, holdout_days: int = 365, seeds=(42, 7, 2026), synthetic=False
+):
+    """학습·독립 검증·MLflow 저장 전용 함수. 배포는 train_and_register()를 사용한다."""
+    forecaster, _, _, meta = _fit_initial(csv_path, holdout_days, seeds, synthetic)
+    with mlflow.start_run(run_name="diesel-initial-train") as run:
+        mlflow.set_tags({"workflow": "initial-training", "training_only": "true"})
+        model_uri = _log_training(forecaster, meta)
+        return {
+            "rmse": meta["rmse"],
+            "naive_rmse": meta["naive_rmse"],
+            "run_id": run.info.run_id,
+            "model_uri": model_uri,
+        }
+
+
+def train_and_register(
+    csv_path: str = DEFAULT_CSV, holdout_days: int = 365, seeds=(42, 7, 2026), synthetic=False
+):
+    """대시보드와 운영자 CLI의 초기 학습·게이트·등록 경로."""
+    forecaster, frame, val_idx, meta = _fit_initial(csv_path, holdout_days, seeds, synthetic)
     return log_and_gate(forecaster, frame, val_idx, meta, run_name="diesel-base-train")
 
 

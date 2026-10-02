@@ -205,3 +205,45 @@ class BatchTestResponse(ContractModel):
     predictions: list[BatchPair] = Field(min_length=PAIR_WINDOW)
     drift_check: DriftCheck
     _check_dates = field_validator("predictions")(_consecutive)
+
+
+class EvaluationResponse(ContractModel):
+    predictions: list[BatchPair] = Field(min_length=PAIR_WINDOW)
+    model_version: str
+    _check_dates = field_validator("predictions")(_consecutive)
+
+
+class TrainingRequest(ContractModel):
+    holdout_days: int = Field(default=365, ge=30, le=3650)
+
+
+class TrainingResult(RetrainMetrics):
+    """초기 학습의 게이트·배포 결과. 실제 로드한 버전까지 확인한다."""
+
+    rmse: RmseVector
+    naive_rmse: RmseVector
+    passed: bool
+    run_id: str
+    model_uri: str
+    reload: ReloadResult | None = None
+
+    @model_validator(mode="after")
+    def verified_deployment(self):
+        if self.reload is not None and not self.promoted:
+            raise ValueError("서빙 교체 결과는 승격 뒤에만 기록합니다")
+        if self.reload and self.reload.reloaded:
+            if self.reload.version != f"champion:{self.version}":
+                raise ValueError("서빙 버전은 승격 버전과 일치해야 합니다")
+        return self
+
+
+class TrainingJob(ContractModel):
+    state: Literal["idle", "running", "completed", "failed"] = "idle"
+    job_id: str | None = None
+    filename: str | None = None
+    rows: int | None = None
+    holdout_days: int | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+    result: TrainingResult | None = None
+    error: str | None = None

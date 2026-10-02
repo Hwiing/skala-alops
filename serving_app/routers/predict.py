@@ -17,6 +17,7 @@ from serving_app.schemas import (
     BatchTestRequest,
     BatchTestResponse,
     DriftCheck,
+    EvaluationResponse,
     PredictionValues,
     PredictRequest,
     PredictResponse,
@@ -107,6 +108,16 @@ def batch_test(req: BatchTestRequest):
     pairs = _pair_with_actual(model, [p.model_dump(mode="json") for p in req.rows])
     recent_predictions.record_batch(pairs, model.version)
     return BatchTestResponse(predictions=pairs, drift_check=judge_and_swap())
+
+
+@router.post("/predict/evaluate", response_model=EvaluationResponse)
+def evaluate_upload(req: BatchTestRequest):
+    """실측 성능 확인. 자동 재학습/최근 탐지 기록을 변경하지 않는다."""
+    model = _get_model_or_503()
+    return EvaluationResponse(
+        predictions=_pair_with_actual(model, [p.model_dump(mode="json") for p in req.rows]),
+        model_version=model.version,
+    )
 
 
 # 판정·교체가 끝나지 않은 기록이 있는지. 정답을 채우면 켜고, 판정이 끝났고 교체가 필요 없거나
