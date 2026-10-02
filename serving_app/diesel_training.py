@@ -9,7 +9,7 @@
 import numpy as np
 
 from data.diesel_features import HORIZONS, DailyFrame, FeatureScaler, build_windows
-from serving_app.diesel_model import DieselForecaster, train
+from serving_app.diesel_model import LEARNING_RATE, DieselForecaster, train
 
 RECENT_WEIGHT = 3.0
 
@@ -57,6 +57,7 @@ def fit(frame: DailyFrame, train_idx: list[int], seeds: list[int]) -> tuple[Dies
         "train_windows": len(kept),
         "seeds": seeds,
         "epochs": epochs,
+        "learning_rate": LEARNING_RATE,
     }
     return DieselForecaster(models, scaler), info
 
@@ -77,6 +78,7 @@ def finetune(
         "train_windows": len(kept),
         "seeds": list(range(len(forecaster.models))),
         "epochs": [epochs] * len(forecaster.models),
+        "learning_rate": lr,
     }
 
 
@@ -103,7 +105,7 @@ def report(meta: dict) -> str:
     lines = [
         f"데이터 {meta['data_period']} {meta['rows']}행 ({'합성' if meta.get('synthetic') else '실측'})",
         f"학습 타깃 {meta['train_target_period']} {meta['train_windows']}개 · "
-        f"검증 {meta['validation_period']} {meta['validation_windows']}개 · seed {meta['seeds']} epoch {meta['epochs']}",
+        f"검증 {meta['validation_period']} {meta['validation_windows']}개 · seed {meta['seeds']} epoch {meta['epochs']} lr {meta.get('learning_rate')}",
         f"{'k주차 평균 RMSE 원/L':22}" + "".join(f"{k + 1}주".rjust(9) for k in range(HORIZONS)),
         f"{'naive (마지막 입력일 가격)':22}" + "".join(f"{v:9.1f}" for v in meta["naive_rmse"]),
         f"{'naive + 정책 규칙 (참고)':22}" + "".join(f"{v:9.1f}" for v in meta["rule_rmse"]),
