@@ -140,6 +140,8 @@ def log_and_gate(forecaster, frame, val_idx, meta: dict, run_name: str) -> dict:
                 "input_days": INPUT_DAYS,
                 "seeds": ",".join(map(str, meta["seeds"])),
                 "epochs": ",".join(map(str, meta["epochs"])),
+                "learning_rate": meta["learning_rate"],
+                "base_version": meta.get("base_version", "none"),
                 "train_target_period": " ~ ".join(meta["train_target_period"]),
                 "validation_period": " ~ ".join(meta["validation_period"]),
                 "policy_pass_day0": PASS_DAY0,
