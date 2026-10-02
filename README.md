@@ -1,84 +1,477 @@
-# SKALA 경유 주간 가격 예측 · AIOps
+# Oilgorithm
 
-운송·물류회사의 유류비 계획을 돕기 위해 **다음 1~4주 전국 평균 자동차용경유 가격(원/L)**을 예측합니다.
-공통 계약은 [docs/contracts.md](docs/contracts.md), 상수·CSV 검증은 [data/contracts.py](data/contracts.py),
-요청·응답·AIOps 결과 타입은 [serving_app/schemas.py](serving_app/schemas.py)를 기준으로 합니다.
+## 경유 가격 예측 및 AIOps 파이프라인
 
-## 팀 확정 도메인 매핑
+> **운송·물류회사가 향후 유류비를 미리 예측하고, 시장 환경 변화에도 지속적으로 신뢰할 수 있는 예측 서비스를 사용할 수 있도록 하는 경유 가격 예측·운영 시스템**
 
-| 항목 | 확정 내용 |
-|---|---|
-| 예측 대상 | 다음 1·2·3·4주 경유 평균가 |
-| API 입력 | 날짜 포함 최근 120일 × 경유 4피처, 하루 간격 |
-| 모델 | 내부 28일 × 8피처 LSTM·scaler·정책 규칙을 포함한 MLflow pyfunc |
-| 데이터 공급 | 자동차용경유·싱가포르 경유·ECOS 환율·경유 유류세 |
-| 배포 게이트 | 1주 RMSE ≤ 50, 4주 각각 naive보다 우수, 4주 평균 RMSE ≤ Production |
-| 드리프트 계약 | 정답이 확보된 최근 28개 기준일의 1주 RMSE > max(같은 기간 naive RMSE, 10원/L) |
-| 재학습 | 최근 627행, Production warm start·365일 학습·독립 90일 검증 |
-| 이해관계자 | 운송·물류회사 |
+Oilgorithm은 **다음 1~4주 전국 평균 자동차용 경유 가격(원/L)**을 예측하고, 모델 성능 저하가 발생하면 이를 자동으로 감지하여 **재학습 → 성능 검증 → Production 교체**까지 수행하는 AI 서비스입니다.
 
-## 현재 상태
+---
 
-- 날짜·양수/유한값·연속성 검증, 120일 예측 API, 175행 배치와 주간 정답 연결, pyfunc 로더를 구현했습니다.
-- Registry 승격 버전과 실제 서빙 버전이 일치할 때만 교체 성공으로 표시하고 예측 기록을 비웁니다.
-- 모델 미준비는 503입니다. 배치와 실시간 예측의 지연 정답 적재 모두 드리프트 판정 → 재학습 → 게이트 → 운영자 알림으로 연결됩니다. 재학습은 설정 CSV·업로드 중 최소 627행이며 마지막 날짜가 가장 최근인 데이터를 사용합니다.
-- 운영자 알림은 `logs/alerts.jsonl` 수신함에 기본 저장되며 `/logs/alerts.jsonl`로 확인합니다. 웹훅은 선택 설정입니다. Registry 승격과 실제 서빙 교체 성공·실패를 별도로 알립니다.
-- `data/sample_diesel_prices.csv`는 **120일 합성 예제**입니다. 175행 업로드나 실제 학습 성능 증빙으로 쓰지 않습니다.
-- `examples/predict.json`, `examples/batch-test.json`도 API 계약 확인용 합성 요청입니다.
-- MLflow는 별도 서버 없이 로컬 SQLite, Docker는 단일 컨테이너입니다. 합성 데이터·실제 TensorFlow/MLflow의 자동 승격·서빙 교체 재현과 운영 제한은 [AIOps 검증 기록](docs/evidence/aiops_recovery_and_promotion.md)을 참고하세요.
+# 1. Pain Point — 왜 필요한가?
 
-## 실행
+운송·물류회사의 비용 구조에서 유류비는 중요한 변동비 중 하나입니다.
 
-Python 3.11, uv, make를 사용하며 모든 명령은 저장소 루트에서 실행합니다.
+경유 가격이 단기간에 크게 상승하면 운송 원가가 증가하지만, 실제 가격 변화를 확인한 이후 대응한다면 배차 계획, 운임 산정, 예산 관리가 이미 늦어질 수 있습니다.
+
+따라서 운영 담당자에게 필요한 것은 단순히 **현재 경유 가격을 확인하는 것**이 아니라,
+
+> **향후 수 주간 경유 가격이 어떻게 움직일지를 미리 파악하여 유류비 계획에 반영하는 것**
+
+입니다.
+
+또한 AI 모델을 한 번 학습했다고 해서 계속 같은 성능을 유지하는 것도 아닙니다.
+
+국제 경유 가격, 환율, 세금 정책, 공급 상황 등이 변화하면 학습 당시와 데이터 패턴이 달라져 예측 오차가 증가할 수 있습니다.
+
+일반 소프트웨어 장애와 달리 AI 모델은 **API가 정상적으로 200 응답을 반환하면서도 잘못된 예측을 계속 제공할 수 있습니다.**
+
+
+---
+
+# 2. AI 솔루션 및 운영 목표
+
+## 2.1 예측 서비스
+
+모델은 최근 데이터를 기반으로 다음 **1·2·3·4주 전국 평균 자동차용 경유 가격**을 예측합니다.
+
+### 입력 데이터
+
+주요 데이터는 다음과 같습니다.
+
+| 데이터           | 역할                 |
+| ------------- | ------------------ |
+| 국내 자동차용 경유 가격 | 예측 대상 및 핵심 시계열     |
+| 싱가포르 경유 가격    | 국제 석유제품 가격 변화 반영   |
+| 원/달러 환율       | 수입 원가 변화 반영        |
+| 경유 유류세        | 정책에 따른 가격 구조 변화 반영 |
+
+API는 날짜를 포함한 **최근 120일 데이터**를 입력받으며, 내부 모델은 전처리 후 **28일 × 8개 피처** 시퀀스를 사용합니다.
+
+---
+
+## 2.2 서비스 운영 목표
+
+모델 정확도만 높이는 것이 아니라 **운영 가능한 모델인지**를 함께 판단합니다.
+
+### 배포 기준
+
+새 모델은 다음 조건을 모두 만족해야 Production 후보가 됩니다.
+
+```text
+1주 RMSE ≤ 50원/L
+
+AND
+
+1·2·3·4주 예측 RMSE가
+각각 Naive 모델보다 우수
+
+AND
+
+4주 평균 RMSE가
+현재 Production 모델보다 우수
+```
+
+---
+
+# 3. 운영 설계
+
+## 3.1 모델 학습 및 배포
+
+모델 학습 결과는 MLflow에 기록하고, Gate를 통과한 모델만 Registry의 `champion`으로 승격합니다.
+
+```text
+데이터 준비
+    ↓
+모델 학습
+    ↓
+MLflow Tracking
+    ↓
+성능 평가
+    ↓
+Deployment Gate
+    ↓
+MLflow Registry
+    ↓
+champion 승격
+    ↓
+FastAPI Serving
+```
+
+---
+
+## 3.2 Drift 판단
+
+운영 중에는 정답이 확보된 **최근 28개 기준일**의 1주 예측 결과를 이용하여 성능을 평가합니다.
+
+Drift 기준은 다음과 같습니다.
+
+```text
+최근 28개 기준일의 1주 RMSE
+>
+max(
+    같은 기간 Naive RMSE,
+    10원/L
+)
+```
+
+즉 단순히 RMSE가 조금 증가했다고 바로 재학습하는 것이 아니라,
+
+* 현재 모델이 Naive보다 나빠졌는지
+* 최소 허용 오차 수준도 넘어섰는지
+
+를 함께 확인합니다.
+
+---
+
+## 3.3 자동 재학습
+
+Drift가 감지되면 새로운 모델을 처음부터 학습하지 않고 현재 Production 모델을 기반으로 **Warm Start Fine-tuning**을 수행합니다.
+
+```text
+Drift 감지
+   ↓
+운영자 경고
+   ↓
+최근 데이터 확보
+   ↓
+Production 모델 Warm Start
+   ↓
+Fine-tuning
+   ↓
+독립 검증
+   ↓
+배포 Gate 재검증
+```
+
+재학습에는 최소 **627행**이 필요하며,
+
+* 최근 365일: 학습
+* 독립 90일: 검증
+
+구조를 사용합니다.
+
+새 모델이 Gate를 통과하지 못하면 **현재 Production 모델을 그대로 유지**합니다.
+
+---
+
+## 3.4 운영자 알림
+
+AIOps 이벤트는 기본적으로
+
+```text
+logs/alerts.jsonl
+```
+
+에 기록합니다.
+
+대표 상태는 다음과 같습니다.
+
+```text
+[WARN] drift detected
+        ↓
+[INFO] retrain triggered
+        ↓
+[OK] new model promoted
+```
+
+---
+
+# 4. 전체 아키텍처
+
+```text
+[경유 데이터 CSV]
+ 자동차용 경유
+ 싱가포르 경유
+ 환율
+ 유류세
+        ↓
+[데이터 검증·전처리]
+ 날짜 / 결측 / 연속성 / 값 범위
+        ↓
+[Feature Engineering]
+        ↓
+[LSTM 학습]
+        ↓
+[MLflow Tracking]
+        ↓
+[Deployment Gate]
+        ↓
+[MLflow Registry]
+        ↓
+[champion]
+        ↓
+[FastAPI Serving]
+   ├─ /predict
+   ├─ /health
+   ├─ /data/upload
+   └─ /predict/batch-test
+        ↓
+[Docker Container]
+        ↓
+[Prediction 기록]
+        ↓
+[최근 28개 기준일 RMSE]
+        ↓
+[Drift 판단]
+        ↓
+[logs/alerts.jsonl]
+        ↓
+[Warm Start Fine-tuning]
+        ↓
+[독립 Validation]
+        ↓
+[Gate 재검증]
+      ↙        ↘
+   통과          실패
+    ↓             ↓
+champion 승격   기존 모델 유지
+    ↓
+Serving Model 교체
+```
+
+
+---
+
+# 5. API 명세
+
+## 주요 Endpoint
+
+| Method | Endpoint              | 역할                         |
+| ------ | --------------------- | -------------------------- |
+| `GET`  | `/health`             | 서버 및 모델 상태 확인              |
+| `POST` | `/predict`            | 향후 1~4주 경유 가격 예측           |
+| `POST` | `/predict/batch-test` | 과거 데이터를 이용한 배치 평가·Drift 검사 |
+| `POST` | `/data/upload`        | 경유 학습 데이터 CSV 업로드          |
+| `GET`  | `/data/status`        | 현재 업로드 데이터 상태 확인           |
+| `GET`  | `/logs/{filename}`    | 운영·AIOps 로그 조회             |
+
+Swagger:
+
+```text
+http://localhost:8000/docs
+```
+
+### Prediction 예시
 
 ```bash
-make setup-dev  # API·계약 테스트, TensorFlow/MLflow 제외
+curl \
+  -H 'Content-Type: application/json' \
+  --data-binary @examples/predict.json \
+  http://localhost:8000/predict
+```
+
+### Batch Test 예시
+
+```bash
+curl \
+  -H 'Content-Type: application/json' \
+  --data-binary @examples/batch-test.json \
+  http://localhost:8000/predict/batch-test
+```
+
+---
+
+# 6. 실행 방법
+
+## 6.1 개발 환경
+
+Python 3.11을 기준으로 하며 모든 명령은 저장소 루트에서 실행합니다.
+
+```bash
+make setup-dev
 make lint test
 make run
 ```
 
-대시보드 <http://localhost:8000/>, Swagger <http://localhost:8000/docs>.
+실행 후:
+
+```text
+Dashboard
+http://localhost:8000/
+
+Swagger
+http://localhost:8000/docs
+```
+
+---
+
+## 6.2 데이터 업로드
 
 ```bash
-curl http://localhost:8000/health
-curl -H 'Content-Type: application/json' --data-binary @examples/predict.json http://localhost:8000/predict
-curl -H 'Content-Type: application/json' --data-binary @examples/batch-test.json http://localhost:8000/predict/batch-test
-# 최소 175행인 정규화 경유 CSV 업로드 (파일 경로는 실제 전달본에 맞춤)
-curl -F 'file=@data/processed/diesel_features_2008_spliced.csv' http://localhost:8000/data/upload
+curl \
+  -F 'file=@data/processed/diesel_features_2008_spliced.csv' \
+  http://localhost:8000/data/upload
+```
+
+상태 확인:
+
+```bash
 curl http://localhost:8000/data/status
 ```
 
-실제 경유 모델을 학습·등록하려면 전체 의존성과 [데이터 재생성/인계](data/README.md)에서 설명한
-원본·가공 파일이 필요합니다. CSV 업로드가 모델 학습을 자동 실행하지는 않습니다.
+`data/sample_diesel_prices.csv`는 **API 계약 확인용 120일 합성 데이터**이며 실제 모델 학습 성능 증빙에는 사용하지 않습니다.
+
+---
+
+## 6.3 모델 학습
+
+전체 의존성 설치:
 
 ```bash
 make setup
-.venv/bin/python scripts/train_diesel_baseline.py --csv data/processed/diesel_features_2008_spliced.csv
-MLFLOW_TRACKING_URI=sqlite:///mlflow.db .venv/bin/python serving_app/diesel_registry.py --csv data/processed/diesel_features_2008_spliced.csv
-# 게이트 통과로 champion이 준비된 뒤 전환
-MODEL_SOURCE=mlflow LOADING_MODE=eager make run
 ```
 
-`.env.example`은 설정 예시이며 앱이 자동으로 읽지 않습니다. 셸 환경변수로 전달하세요.
-로컬 pyfunc는 `serving_app/models/diesel_pyfunc`, Registry 버전은 `champion:<번호>`로 식별합니다.
-학습 실패나 게이트 미통과 시 Production이 없을 수 있습니다. 실측 학습·실제 버전 전환·Docker 실행
-증빙은 공통 계약 테스트와 별도로 확인합니다. `make docker`로 단일 컨테이너를 실행할 수 있습니다.
-이미지는 기본 MLflow 모드로 모델·데이터 없이 시작합니다(`/predict` 503). 대시보드에서 실제 CSV를 업로드하고
-2번 **초기 모델 학습·배포**를 실행하면 배포 기준을 통과한 모델을 등록하고 바로 서빙합니다.
-새 저장소의 첫 성공 배포는 `champion:1`이며, 기존 저장소의 버전 번호는 이어집니다. 볼륨과 CLI 실행은
-[공통 계약 - Docker 실행·영속화](docs/contracts.md#docker-실행영속화)를 참고하세요.
+Baseline 학습:
 
-## 구조와 역할
+```bash
+.venv/bin/python scripts/train_diesel_baseline.py \
+  --csv data/processed/diesel_features_2008_spliced.csv
+```
 
-| 담당 | GitHub | 주 작업 경로 |
-|---|---|---|
-| 데이터·도메인 | [kwon yuna](https://github.com/yunanana) | `data/`, CSV 계약 |
-| 모델·MLflow | [bookschooler](https://github.com/bookschooler) | `scripts/train_diesel_baseline.py`, `serving_app/diesel_model.py`, `diesel_registry.py` |
-| 서빙·Docker | [leejunhyeong](https://github.com/hootbee) | `serving_app/model_loader.py`, `schemas.py`, `routers/`, Docker |
-| AIOps | [kchanis1223](https://github.com/kchanis1223) | `serving_app/monitoring/`, `scripts/simulate_drift.py` |
-| 통합·PM/발표 | [Hwiing](https://github.com/Hwiing) | `docs/`, CI, 통합 검증·발표 |
+MLflow 학습 및 Registry 등록:
 
-공통 규격은 [계약](docs/contracts.md), 원본 재사용 내역은 [출처와 변경](docs/source-mapping.md),
-통합 순서와 발표 항목은 [협업 계획](docs/team-plan.md)을 참고하세요.
-브랜치는 `feat/<issue-number>-<topic>`, PR에는 이슈 링크와 실제 검증 결과를 첨부합니다.
-개인 실습 폴더 `.local-practice/`, 업로드 데이터, 모델, SQLite, 로그는 커밋하지 않습니다.
+```bash
+MLFLOW_TRACKING_URI=sqlite:///mlflow.db \
+.venv/bin/python serving_app/diesel_registry.py \
+  --csv data/processed/diesel_features_2008_spliced.csv
+```
+
+운영 모델 서빙:
+
+```bash
+MODEL_SOURCE=mlflow \
+LOADING_MODE=eager \
+make run
+```
+
+MLflow는 별도 서버 없이 **로컬 SQLite**를 사용합니다.
+
+---
+
+## 6.4 Docker
+
+단일 컨테이너 환경으로 실행합니다.
+
+```bash
+make docker
+```
+
+컨테이너에서도 동일하게
+
+```text
+/predict
+/health
+/data/upload
+/predict/batch-test
+```
+
+Endpoint가 동작하는지 확인합니다.
+
+---
+
+# 7. 동작 검증
+
+
+### ① 정상 예측
+
+```text
+데이터 입력
+→ /predict
+→ 1~4주 가격 예측
+```
+
+### ② 모델 배포
+
+```text
+모델 학습
+→ 성능 평가
+→ Gate 통과
+→ MLflow champion 승격
+→ 실제 Serving 모델 교체
+```
+
+### ③ Drift 발생
+
+```text
+최근 예측 성능 악화
+→ Drift 판단
+→ WARN
+```
+
+### ④ 자동 복구
+
+```text
+Drift
+→ Fine-tuning
+→ Validation
+→ Gate
+→ champion 승격
+→ Serving 교체
+```
+
+### ⑤ 실패 안전장치
+
+```text
+새 모델 Gate 실패
+→ 기존 Production 유지
+```
+
+---
+
+# 8. 프로젝트 구조
+
+```text
+.
+├── data/
+│   ├── contracts.py
+│   ├── README.md
+│   └── processed/
+│
+├── serving_app/
+│   ├── model_loader.py
+│   ├── schemas.py
+│   ├── diesel_model.py
+│   ├── diesel_registry.py
+│   ├── routers/
+│   └── monitoring/
+│
+├── scripts/
+│   ├── train_diesel_baseline.py
+│   └── simulate_drift.py
+│
+├── docs/
+│   ├── contracts.md
+│   ├── source-mapping.md
+│   ├── team-plan.md
+│   └── evidence/
+│
+└── examples/
+```
+
+세부 입력·출력 계약은 `docs/contracts.md`를 기준으로 합니다.
+
+---
+
+# 9. 팀 역할
+
+| 역할             | 담당                                              | 주요 범위                    |
+| -------------- | ----------------------------------------------- | ------------------------ |
+| 데이터·도메인        | [kwon yuna](https://github.com/yunanana)        | `data/`, CSV 계약          |
+| 모델·MLflow      | [bookschooler](https://github.com/bookschooler) | Baseline, 모델, Registry   |
+| Serving·Docker | [leejunhyeong](https://github.com/hootbee)      | FastAPI, Loader, Docker  |
+| AIOps          | [kchanis1223](https://github.com/kchanis1223)   | Drift, Retraining, Alert |
+| 통합·PM/발표       | [Hwiing](https://github.com/Hwiing)             | 통합 검증, 문서, 발표            |
+
+각 담당 기능은 독립적인 결과물이 아니라 최종적으로 다음 하나의 파이프라인으로 연결됩니다.
+
+```text
+Data
+→ Model
+→ Registry
+→ Serving
+→ Monitoring
+→ Drift
+→ Retraining
+→ Redeployment
+```
