@@ -90,3 +90,18 @@ def status():
         "min_price": min(closes),
         "max_price": max(closes),
     }
+
+
+@router.get("/preview")
+def preview():
+    """서버 CSV 파서로 검증한 마지막 175행. 첫 예측·실측 검증은 동일한 업로드를 사용한다."""
+    try:
+        path = latest_upload()
+    except FileNotFoundError as exc:
+        raise HTTPException(404, "CSV를 먼저 업로드하세요.") from exc
+    rows = load_diesel_rows(path)
+    return {
+        "filename": os.path.basename(path),
+        "rows": len(rows),
+        "preview": rows[-MIN_ROWS:],
+    }

@@ -52,6 +52,10 @@ CSV의 추가 열은 공통 피처에서 제외합니다. API의 추가 JSON 필
 | GET | `/health` | `status`, `contract_version`, `model_loaded`, `model_version`, `model_source`, `loading_mode` | liveness이며 lazy 첫 추론 전 `model_loaded=false`는 정상 |
 | POST | `/data/upload` | UTF-8/BOM CSV 최소 175행 → `filename`, `rows`, `filled`(실시간 예측에 채운 주차 정답 수), 판정했으면 `drift_check`, 판정이 실패했으면 `drift_check_error{status_code, detail}` | 인코딩·컬럼·행 수·데이터 검증 실패 400. 판정 오류는 파일 저장·정답 적재가 끝났으므로 200 + `drift_check_error` |
 | GET | `/data/status` | `exists`, 파일명·기간·행 수·가격 범위 | 데이터가 없으면 `exists:false` |
+| GET | `/data/preview` | 저장된 최신 CSV의 파일명·전체 행 수·검증한 최근 175행(공통 5컬럼) | 업로드 없음 404 |
+| POST | `/training/start` | `{holdout_days:365}`(30~3650), 기본 365. 업로드 CSV 전체로 초기 학습 시작 → 202 + `TrainingJob` | 업로드 없음·행 부족 400, 레지스트리 모드가 아니거나 다른 학습 진행 중 409, 요청 계약 위반 422 |
+| GET | `/training/status` | `state`(`idle/running/completed/failed`), 작업 ID·입력 정보·시작/종료 시각·학습 결과(`rmse/naive_rmse`, `run_id`, 저장된 모델의 `model_uri`) 또는 오류 | 작업 상태는 현재 서버 프로세스 메모리에 보관 |
+| POST | `/predict/evaluate` | `BatchTestRequest` → `{predictions:BatchPair[], model_version}`. 정답이 있는 과거 데이터로 성능 확인 | 입력 422, 모델 미준비/출력 계약 위반 503 |
 | POST | `/predict` | `PredictRequest` → `PredictResponse`. 성공 시 예측 기록에 정답 없이 남김(`source=live`) | 입력 422, 모델 미준비/모델 출력 계약 위반 503 |
 | POST | `/predict/batch-test` | `BatchTestRequest` → `BatchTestResponse` | 입력 422, 모델 미준비/결과 계약 위반 503, AIOps 미구현 501 |
 | GET | `/logs` | 로그 파일 목록 | 기존 조회 API |
@@ -130,6 +134,18 @@ Production 가중치로 warm start하고 scaler는 재fit하지 않습니다. �
 | `promoted` | true | 게이트 통과·Registry 승격. rmse/naive_rmse 4개와 version 필수 |
 | `gate_failed` | false | 학습·검증 완료, 게이트 실패. rmse/naive_rmse 4개, 기존 모델 유지 |
 | `no_production` | false | warm start할 Production 없음. rmse/naive_rmse는 null |
+
+## 시뮬레이터 학습·검증 흐름
+
+화면은 1 학습 데이터 → 2 모델 학습 → 3 평상시 가격 예측 → 4 급변 상황 예측 → 5 운영자 알림 → 6 재학습 필요성·배포 게이트 판단 → 7 모델 재학습 결과 → 8 급변 상황 재예측 → 9 운영로그 순서입니다. 중복된 업로드 예측·검증 패널은 제거하고, 평상시 예측은 `/predict/evaluate`로 정답 비교만 수행합니다. 급변 상황은 `/predict/batch-test`로 자동 대응을 실행하며 판정·재학습 결과는 6·7번에 분리해 표시합니다. 화면의 번호는 표시 순서이며 실제 배포 게이트는 후보 재학습 후 승격 여부를 평가합니다. 운영자 알림은 실제 `alerts.jsonl` 기록을 표시합니다.
+
+2번 초기 학습은 업로드 전체를 사용해 학습·독립 검증을 수행하고 `train_initial()`로 모델과 지표를 MLflow에 저장합니다. 배포 게이트·Registry 등록·Production/champion 승격·서빙 교체는 실행하지 않으며, 기존 서빙 모델과 예측 기록을 보존합니다. 최소 행 수는 `max(627, 120 + holdout_days + 2×28)`입니다. 별도 작업 스레드에서 실행하고 AIOps 재학습과 같은 잠금으로 중복 학습을 막습니다. 운영자 CLI의 `train_and_register()`와 급변 상황의 `fine_tune()`은 기존 게이트·등록 경로를 유지합니다. 서빙 모델이 아직 없으면 초기 학습만으로 예측을 활성화하지 않으며, 운영자가 별도로 검증·배포해야 합니다.
+
+작업 상태는 단일 서버 프로세스 메모리에 있으며 재시작 후 `idle`로 초기화됩니다. MLflow 학습 기록·등록 모델·CSV는 기존 볼륨에 남습니다. 이 작업 관리 API는 기본 단일 워커 실행을 기준으로 합니다.
+
+`/predict/evaluate`는 예측 기록·드리프트 판정·재학습을 변경하지 않습니다. 평상시 시연은 175행의 예시 가격으로 28개 기준일의 1~4주 예측 성능을 표시합니다. 드리프트 상황은 기존 `/predict/batch-test`에서 별도로 실행하고, 배치 탐지 RMSE와 재학습 후보의 독립 검증 RMSE를 구분해 표시합니다.
+
+급변 상황 재예측은 4번 응답의 마지막 기준일에 해당하는 120행 입력과 대응 전 예측값을 화면에 보관합니다. 8번은 **동일한 급변 입력 120행**을 `/predict`로 다시 보내 모델 버전과 예측값을 비교합니다. 후보가 미승격되면 기존 버전 유지도 정상적인 대응 결과로 표시하며 성능 개선·승격을 보장하지 않습니다.
 
 ## AIOps 상태와 서빙 교체
 

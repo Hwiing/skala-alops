@@ -205,3 +205,34 @@ class BatchTestResponse(ContractModel):
     predictions: list[BatchPair] = Field(min_length=PAIR_WINDOW)
     drift_check: DriftCheck
     _check_dates = field_validator("predictions")(_consecutive)
+
+
+class EvaluationResponse(ContractModel):
+    predictions: list[BatchPair] = Field(min_length=PAIR_WINDOW)
+    model_version: str
+    _check_dates = field_validator("predictions")(_consecutive)
+
+
+class TrainingRequest(ContractModel):
+    holdout_days: int = Field(default=365, ge=30, le=3650)
+
+
+class TrainingResult(ContractModel):
+    """초기 학습 결과. 배포 게이트·등록·승격·서빙 교체는 포함하지 않는다."""
+
+    rmse: RmseVector
+    naive_rmse: RmseVector
+    run_id: str
+    model_uri: str
+
+
+class TrainingJob(ContractModel):
+    state: Literal["idle", "running", "completed", "failed"] = "idle"
+    job_id: str | None = None
+    filename: str | None = None
+    rows: int | None = None
+    holdout_days: int | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+    result: TrainingResult | None = None
+    error: str | None = None
