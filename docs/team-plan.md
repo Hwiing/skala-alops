@@ -3,7 +3,7 @@
 GitHub 이슈의 담당자별 체크리스트를 기준으로 진행합니다.
 
 1. **yunanana**: 출처/단위/시차, 정규화 CSV, 추가 피처와 정책 변수 정의, 누수·결측·휴일 정책.
-2. **bookschooler**: baseline/naive/LSTM 검증, MLflow 기록, 게이트, 고정 scaler, 최근 30일 fine-tuning과 독립 검증.
+2. **bookschooler**: baseline/naive/LSTM 검증, MLflow 기록, 게이트, 고정 scaler, 최근 627행·365일 학습·90일 독립 검증 fine-tuning.
 3. **hootbee**: MLflow 로더, 실제 버전 응답, batch 라우터, Docker, Lazy/Eager, 캐시 교체.
 4. **kchanis1223**: RMSE, 실제값 연결/윈도우, 정상·급변 시나리오, 로그·운영자 알림·재학습·중복 방지.
 5. **Hwiing**: 계약 변경 조정, 병합, end-to-end 시연, README/API/아키텍처·발표·증빙 통합.

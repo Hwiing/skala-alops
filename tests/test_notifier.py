@@ -103,6 +103,13 @@ def test_gate_failed_alert_explains_reasons():
     assert "60.00 > 50" in alert["action"]
 
 
+def test_alert_reports_naive_and_absolute_drift_thresholds():
+    alert = nt.build_alert(result(detection={**DETECTION, "min_rmse": 10.0, "naive_rmse": 4.0}))
+    assert alert["threshold_rmse"] == 10.0
+    assert alert["threshold_naive_rmse"] == 4.0 and alert["threshold_min_rmse"] == 10.0
+    assert "판정 하한 10.00원/L" in alert["cause"]
+
+
 # ---------- 전송 ----------
 
 

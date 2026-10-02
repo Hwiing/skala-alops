@@ -49,7 +49,10 @@ def build_alert(result: dict) -> dict | None:
     if status not in ALERT_STATUSES or det.get("status") != "drift":
         return None  # ok·판정 보류는 알리지 않는다
     week1, naive = det.get("week1_rmse"), det.get("naive_rmse")
+    minimum = det.get("min_rmse", 0.0)
     cause = f"1주차 RMSE {week1:.2f} > 같은 기간 naive RMSE {naive:.2f}"
+    if minimum:
+        cause += f" (판정 하한 {minimum:.2f}원/L도 초과)"
     reasons = [r for r in result.get("reasons") or [] if not r.startswith("탐지:")]
     reload = result.get("reload")
     if reload is not None:
@@ -70,6 +73,8 @@ def build_alert(result: dict) -> dict | None:
         "cause": cause,
         "week1_rmse": week1,
         "threshold_naive_rmse": naive,
+        "threshold_min_rmse": minimum,
+        "threshold_rmse": max(naive, minimum),
         "model_version": det.get("model_version"),
         "period": det.get("period"),
         "new_version": result.get("version"),

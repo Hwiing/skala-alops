@@ -17,6 +17,8 @@
 | [10_실측데이터_MLflow_fine_tuning_검증.md](10_실측데이터_MLflow_fine_tuning_검증.md) | 팀 실측 데이터로 실제 MLflow base 등록·fine-tuning·게이트 실패·Production 유지 확인 | #17 재학습 검증 증빙 및 재현 |
 | [11_fine_tuning_강도_실험.md](11_fine_tuning_강도_실험.md) | fine-tuning lr·epoch 6가지와 처음부터 재학습을 5개 시점에서 Production과 비교 | 재학습이 승격되지 않는 이유, 게이트 허용 오차를 두지 않는 근거 |
 
+추가 실행 증빙: [AIOps 복구·최신 데이터·운영자 수신함·실제 자동 승격 검증](aiops_recovery_and_promotion.md).
+
 ## 원본 데이터 위치 (커밋 안 함)
 - `skala-alops/data/raw/study/` — 오피넷(소매가·원유·국제제품가·정유사 주간 공급가), FRED 환율(임시), 유류세 표, 최고가격 이력
 - `skala-alops/.local-practice/feature_study/` — 데이터셋 생성·분석 스크립트와 결과 CSV

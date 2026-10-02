@@ -127,9 +127,10 @@ def fill_live_actuals(rows: list[dict]) -> int:
 
 def judge_and_swap() -> dict:
     """기록 전체로 AIOps 판정을 돌리고, 승격되면 그 버전으로 교체한다. 교체 성공 때만 기록을 비운다."""
+    judged_pairs = recent_predictions.pairs()
     try:
         drift_check = DriftCheck.model_validate(
-            retrain_trigger.check_and_trigger(recent_predictions.pairs())
+            retrain_trigger.check_and_trigger(judged_pairs)
         ).model_dump(exclude_none=True)
     except NotImplementedError as exc:
         raise HTTPException(501, f"AIOps 판정 미구현: {exc}") from exc
@@ -142,7 +143,7 @@ def judge_and_swap() -> dict:
             DriftCheck.model_validate(drift_check)
         except ValidationError as exc:
             raise HTTPException(503, "모델 교체 결과가 공통 계약에 맞지 않습니다") from exc
-        retrain_trigger.notify_reload(drift_check, recent_predictions.pairs())
+        retrain_trigger.notify_reload(drift_check, judged_pairs)
         if drift_check["reload"]["reloaded"]:
             recent_predictions.clear()
     return drift_check
