@@ -137,11 +137,20 @@ def fill_live_actuals(rows: list[dict]) -> int:
     return filled
 
 
+def _retrain_unfinished(drift_check: dict) -> bool:
+    """드리프트를 감지했지만 재학습을 끝내지 못함: 예외·쿨다운·진행 중(retrain_failed), Production 없음,
+    재학습 데이터 부족(탐지 지표가 붙은 insufficient_data)."""
+    status = drift_check["status"]
+    return status in ("retrain_failed", "no_production") or (
+        status == "insufficient_data" and "drift_rmse" in drift_check
+    )
+
+
 def judge_and_swap() -> dict:
     """기록 전체로 AIOps 판정을 돌리고, 승격되면 그 버전으로 교체한다. 교체 성공 때만 기록을 비운다.
 
-    판정 오류(501/503)·재학습 미완료(retrain_failed: 예외·쿨다운·다른 재학습 진행 중)·교체 실패는
-    _judgement_pending을 켠 채로 둬서 다음 업로드가 다시 시도한다.
+    판정 오류(501/503)·드리프트 뒤 재학습 미완료·교체 실패는 _judgement_pending을 켠 채로 둬서
+    다음 업로드가 다시 시도한다. 판정 짝 자체가 부족한 insufficient_data는 새 정답을 기다린다.
     """
     global _judgement_pending
     _judgement_pending = True
@@ -155,7 +164,7 @@ def judge_and_swap() -> dict:
     except ValidationError as exc:
         raise HTTPException(503, "AIOps 결과가 공통 계약에 맞지 않습니다") from exc
 
-    if drift_check["status"] == "retrain_failed":
+    if _retrain_unfinished(drift_check):
         return drift_check
     if drift_check.get("promoted"):
         drift_check["reload"] = model_loader.reload_model(drift_check.get("version"))

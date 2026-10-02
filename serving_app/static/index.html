@@ -807,13 +807,20 @@ function makeRows(prices) {
 
 const INPUT_DAYS = 120; // /predict 입력 행 수
 
+// 공통 계약(data/contracts.py CSV_COLUMNS). /predict는 추가 필드를 422로 거부하므로 이 열만 보낸다.
+const CSV_COLUMNS = ["date", "diesel_price", "singapore_diesel_price", "usd_krw", "tax_or_supply_feature"];
+
 // 업로드 CSV(서버가 검증하는 경유 5컬럼, 따옴표 없는 숫자) → /predict 행. 교체 후 버전 재확인에만 쓴다.
+// 서버는 CSV의 추가 열을 무시하고 받으므로, 여기서도 계약 열만 골라야 같은 파일로 버전을 확인할 수 있다.
 function parseCsv(text) {
   const [head, ...lines] = text.replace(/^\uFEFF/, "").trim().split(/\r?\n/);
   const cols = head.split(",").map((c) => c.trim());
   return lines.filter(Boolean).map((line) => {
     const cells = line.split(",");
-    return Object.fromEntries(cols.map((c, i) => [c, c === "date" ? cells[i].trim() : Number(cells[i])]));
+    return Object.fromEntries(CSV_COLUMNS.map((c) => {
+      const cell = cells[cols.indexOf(c)];
+      return [c, c === "date" ? cell.trim() : Number(cell)];
+    }));
   });
 }
 
