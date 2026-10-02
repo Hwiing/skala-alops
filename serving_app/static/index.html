@@ -1022,7 +1022,7 @@ async function loadModels() {
     hist.innerHTML = "";
     return;
   }
-  const prod = data.history.find((h) => h.version && h.version === data.production_version);
+  const prod = data.production; // champion alias 기준. 최근 이력 밖의 run이어도 서버가 채운다
   card.innerHTML = prod ? modelCard(prod, data.serving_version, serving)
     : `<p class="empty">Production 모델이 없습니다. base 모델을 먼저 학습·승격하세요. 서빙 중: ${esc(serving)}</p>`;
   hist.innerHTML = historyTable(data.history);

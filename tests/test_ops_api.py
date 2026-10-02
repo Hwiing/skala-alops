@@ -65,7 +65,8 @@ def registry(monkeypatch):
             version=1, run_id="r1", current_stage="Archived", aliases=[], creation_timestamp=1_500
         ),
     ]
-    calls = {}
+    calls = {"runs_list": runs}
+    by_id = {r.info.run_id: r for r in runs}
 
     class FakeClient:
         def search_experiments(self):
@@ -82,6 +83,9 @@ def registry(monkeypatch):
         def get_registered_model(self, name):
             return SimpleNamespace(aliases={"champion": "2"})
 
+        def get_run(self, run_id):
+            return by_id[run_id]
+
     monkeypatch.setitem(sys.modules, "mlflow", SimpleNamespace(set_tracking_uri=lambda uri: None))
     monkeypatch.setitem(sys.modules, "mlflow.tracking", SimpleNamespace(MlflowClient=FakeClient))
     monkeypatch.setenv("MODEL_SOURCE", "mlflow")
@@ -95,6 +99,7 @@ def test_models_lists_runs_newest_first_with_registry_fields(registry):
     assert body["source"] == "mlflow"
     assert body["serving_version"] == "champion:2"
     assert body["production_version"] == "2"
+    assert body["production"]["run_id"] == "r3"
     assert [h["run_id"] for h in body["history"]] == ["r3", "r2", "r1"]
     latest, failed, base = body["history"]
     assert latest["version"] == "2" and latest["stage"] == "Production"
@@ -117,7 +122,19 @@ def test_models_in_local_mode_has_no_registry(monkeypatch):
     body = client.get("/models").json()
 
     assert body["source"] == "local" and body["history"] == []
-    assert body["production_version"] is None
+    assert body["production_version"] is None and body["production"] is None
+
+
+def test_production_comes_from_champion_alias_even_outside_recent_runs(registry):
+    """최근 run 목록이 게이트 실패 run으로 가득 차 champion run이 빠져도 Production을 보여준다 (#56 리뷰 P2)."""
+    registry["runs_list"][:] = [r for r in registry["runs_list"] if r.info.run_id == "r2"]
+
+    body = client.get("/models").json()
+
+    assert [h["run_id"] for h in body["history"]] == ["r2"]
+    assert body["production_version"] == "2"
+    assert body["production"]["run_id"] == "r3" and body["production"]["rmse"][0] == 30
+    assert body["production"]["aliases"] == ["champion"]
 
 
 def test_models_reports_registry_error_without_500(registry, monkeypatch):
