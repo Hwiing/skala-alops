@@ -23,5 +23,7 @@ EXPOSE 8000
 
 ENV MODEL_SOURCE=local
 ENV LOADING_MODE=lazy
+# 로그 시각(aiops.log)을 대시보드의 다른 시각(브라우저 한국 시간)과 맞춘다
+ENV TZ=Asia/Seoul
 
 CMD ["uvicorn", "serving_app.main:app", "--host", "0.0.0.0", "--port", "8000"]
