@@ -16,6 +16,8 @@
 | [09_싱가포르경유_0.05접합_근거.md](09_싱가포르경유_0.05접합_근거.md) | 2012-12 이전 국제가격을 싱가포르 경유 0.05%로 접합하는 근거(Platts 기준가 이력, 겹침 통계, 14년 vs 18년) | 데이터 기간 18년 결정, 질문 대응 |
 | [10_실측데이터_MLflow_fine_tuning_검증.md](10_실측데이터_MLflow_fine_tuning_검증.md) | 팀 실측 데이터로 실제 MLflow base 등록·fine-tuning·게이트 실패·Production 유지 확인 | #17 재학습 검증 증빙 및 재현 |
 
+추가 실행 증빙: [AIOps 복구·최신 데이터·운영자 수신함·실제 자동 승격 검증](aiops_recovery_and_promotion.md).
+
 ## 원본 데이터 위치 (커밋 안 함)
 - `skala-alops/data/raw/study/` — 오피넷(소매가·원유·국제제품가·정유사 주간 공급가), FRED 환율(임시), 유류세 표, 최고가격 이력
 - `skala-alops/.local-practice/feature_study/` — 데이터셋 생성·분석 스크립트와 결과 CSV

@@ -2,8 +2,10 @@
 정상·보류·승격·게이트 탈락·데이터 부족·학습 실패·중복·쿨다운·동시 실행·알림을 검증한다."""
 
 import logging
+import sys
 import threading
 from datetime import date
+from types import SimpleNamespace
 
 import pytest
 
@@ -126,6 +128,25 @@ def test_no_production(env):
     env["result"] = {"status": "no_production", "promoted": False, "reasons": ["Production 없음"]}
     result = check(drift_pairs())
     assert result["status"] == "no_production" and "Production 없음" in result["reasons"]
+
+
+def test_production_created_after_failure_can_retry_same_detection(env, monkeypatch):
+    env["result"] = {"status": "no_production", "promoted": False}
+    assert check(drift_pairs())["status"] == "no_production"
+    env["result"] = dict(PROMOTED)
+    monkeypatch.setattr(rt, "RETRAIN_COOLDOWN_SECONDS", 0)
+    assert check(drift_pairs())["status"] == "promoted"
+    assert len(env["calls"]) == 2
+
+
+@pytest.mark.parametrize("synthetic", ["true", "false"])
+def test_training_propagates_synthetic_provenance(monkeypatch, synthetic):
+    calls = []
+    registry = SimpleNamespace(fine_tune=lambda rows, **kwargs: calls.append((rows, kwargs)))
+    monkeypatch.setitem(sys.modules, "serving_app.diesel_registry", registry)
+    monkeypatch.setenv("DIESEL_DATA_SYNTHETIC", synthetic)
+    rt._fine_tune([{"date": "2026-01-01"}])
+    assert calls[0][1] == {"synthetic": synthetic == "true"}
 
 
 @pytest.mark.parametrize(
