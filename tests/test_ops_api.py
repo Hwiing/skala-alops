@@ -184,3 +184,16 @@ def test_summary_without_log_file_and_bad_window(request_log):
     assert body["paths"]["/predict"]["requests"] == 0
 
     assert client.get("/metrics/summary", params={"window": "7d"}).status_code == 422
+
+
+def test_tests_do_not_write_runtime_logs():
+    """테스트가 운영 로그(logs/aiops.log·requests.log)를 오염시키지 않는다 (conftest)."""
+    import logging
+    import os
+
+    assert metrics.REQUESTS_LOG != os.path.join("logs", "requests.log")
+    files = [
+        h.baseFilename for h in logging.getLogger("aiops").handlers if hasattr(h, "baseFilename")
+    ]
+    assert not any(os.path.abspath("logs") in f for f in files)
+    assert not os.getenv("AIOPS_ALERT_FILE", "logs/alerts.jsonl").startswith("logs")
