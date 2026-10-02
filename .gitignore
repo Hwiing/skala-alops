@@ -12,6 +12,8 @@ data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+# 데이터 담당 전달본(실측, 재배포 조건 확인 전 커밋 금지)
+data/diesel-team-handoff-*/
 *.egg-info/
 .DS_Store
 data/uploads/
