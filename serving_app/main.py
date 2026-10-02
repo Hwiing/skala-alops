@@ -6,19 +6,20 @@ Day2: data 라우터 등록 (휘발유 데이터 업로드)
 Day3: "aiops" 로거를 logs/aiops.log 파일로 연결(로깅 설정) + logs 라우터(로그 파일 조회) 등록
 
 정적 대시보드: serving_app/static/index.html 이 /health · /predict · /predict/batch-test ·
-/data/upload · /logs 를 호출하는 확인용 화면입니다. API 라우터를 먼저 등록한 뒤
+/data/upload · /logs · /models · /metrics/summary 를 호출하는 확인용 화면입니다. API 라우터를 먼저 등록한 뒤
 StaticFiles를 "/"에 마지막으로 mount해야, /predict 같은 API 경로가 정적 파일보다
 먼저 매칭됩니다(Starlette는 등록 순서대로 라우트를 검사합니다).
 """
 
 import logging
 import os
+import time
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
 from serving_app import model_loader
-from serving_app.routers import data, health, logs, predict
+from serving_app.routers import data, health, logs, metrics, models, predict
 
 # monitoring/retrain_trigger.py가 쓰는 "aiops" 로거를 logs/aiops.log 파일에 연결한다.
 # (routers/logs.py가 같은 디렉토리를 읽기 전용으로 노출한다.) 여기서 이 로거 하나만
@@ -39,6 +40,21 @@ app.include_router(predict.router)
 app.include_router(health.router)
 app.include_router(data.router)  # 휘발유 데이터 업로드
 app.include_router(logs.router)  # 대시보드: 재학습 로그 파일 조회
+app.include_router(models.router)  # 대시보드: 레지스트리 버전·재학습 이력
+app.include_router(metrics.router)  # 대시보드: 요청 수·응답 시간·성공률
+
+
+@app.middleware("http")
+async def record_request(request: Request, call_next):
+    start = time.perf_counter()
+    status = 500  # 처리 중 예외도 실패로 기록한다
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        return response
+    finally:
+        metrics.record(request.url.path, status, (time.perf_counter() - start) * 1000)
+
 
 _STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/", StaticFiles(directory=_STATIC_DIR, html=True), name="static")  # 대시보드 UI

@@ -23,3 +23,5 @@ mlruns/
 mlartifacts/
 *.db
 *.db-*
+**/diesel-team-handoff-*/
+**/diesel-team-handoff-*.zip

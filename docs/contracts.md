@@ -9,8 +9,7 @@
 
 현재 입력 검증·주간 예측·배치 정답 연결·pyfunc 로더·승격 버전 확인은 구현됐습니다.
 드리프트 판정·자동 재학습 트리거·운영자 알림도 `/predict/batch-test`에 연결됐습니다.
-실시간 `/predict` 기록과 `/data/upload`의 지연 정답 적재·판정도 연결됐습니다.
-재학습 데이터는 `DIESEL_DATA_CSV`와 업로드 CSV 중 627행 이상이면서 마지막 날짜가 가장 최근인 파일의 최근 627행입니다.
+실시간 `/predict` 기록과 업로드를 통한 지연 정답 적재도 구현됐습니다. 재학습 데이터는 설정 CSV와 업로드의 유효한 최소 627행 후보 중 마지막 날짜가 가장 최근인 파일에서 선택합니다.
 실모델이 없으면 예측은 503입니다.
 이 계약 정의가 전체 AIOps 데모 완료를 의미하지는 않습니다.
 
@@ -57,6 +56,8 @@ CSV의 추가 열은 공통 피처에서 제외합니다. API의 추가 JSON 필
 | POST | `/predict/batch-test` | `BatchTestRequest` → `BatchTestResponse` | 입력 422, 모델 미준비/결과 계약 위반 503, AIOps 미구현 501 |
 | GET | `/logs` | 로그 파일 목록 | 기존 조회 API |
 | GET | `/logs/{filename}` | `name`, `content` | 없는 파일 404, 경로 조작 400 |
+| GET | `/models` | `source`, `serving_version`, `production_version`, `history[]`(gate 태그가 있는 최근 50개 run, 최신순: `mode`, `rmse`·`naive_rmse` 1~4주, `gate`, `gate_reasons`, `base_version`, 등록됐으면 `version`·`stage`·`aliases`·`registered_at`) | `MODEL_SOURCE=local`이면 `history:[]`, 레지스트리 조회 실패는 200 + `error` |
+| GET | `/metrics/summary?window=5m\|1h\|6h\|24h` | `/predict`·`/predict/batch-test`·`/data/upload`별 `requests`, `success_rate`(5xx 제외 비율), `p50_ms`, `p95_ms`. 요청이 없으면 값은 `null`. 원본은 `logs/requests.log` | 잘못된 window 422 |
 
 `PredictRequest`는 `{sequence: DailyPoint[120]}`입니다. 실행 가능한 합성 요청은
 [`examples/predict.json`](../examples/predict.json), 정상 응답 예시는
@@ -132,7 +133,7 @@ Production 가중치로 warm start하고 scaler는 재fit하지 않습니다. �
 
 ## AIOps 상태와 서빙 교체
 
-드리프트 계약은 **정답이 확보된 최근 28개 기준일의 1주차 RMSE > 같은 기간 naive RMSE**입니다.
+드리프트 계약은 **정답이 확보된 최근 28개 기준일의 1주차 RMSE > max(같은 기간 naive RMSE, 10원/L)**입니다.
 28개 미만은 정상으로 간주하지 않고 `insufficient_data`입니다. 탐지 임계치는 배포 게이트 50원과 별개입니다.
 `drift_rmse`, `drift_naive_rmse`는 기존 서빙 모델의 탐지 지표입니다.
 `rmse[4]`, `naive_rmse[4]`는 재학습 후 독립 검증 지표이므로 화면·로그에서도 구분합니다.
@@ -206,7 +207,12 @@ AIOps 담당은 `fine_tune()` 결과를 이 상태로 전달하고, 원인을 `r
   `AIOPS_ALERT_WEBHOOK_URL`(비우면 `aiops.log`의 `[ALERT]`만), `AIOPS_ALERT_TIMEOUT`(5초), `AIOPS_ALERT_DEDUP_SECONDS`(3600),
   `RETRAIN_COOLDOWN_SECONDS`(600), `DIESEL_DATA_CSV`(재학습 데이터, 기본 `data/processed/diesel_features_2008_spliced.csv`).
 - 재학습 승격 후 자동 교체는 `MODEL_SOURCE=mlflow`에서만 됩니다. `local`은 레지스트리 버전을 서빙하지 않아 `reload`가 거절됩니다.
-- 재학습은 `DIESEL_DATA_CSV`와 업로드 CSV 중 627행 이상이면서 마지막 날짜가 가장 최근인 파일의 최근 627행을 읽습니다. 새 데이터는 대시보드·`/data/upload`로 올리거나 `DIESEL_DATA_CSV`를 갱신합니다(`dc cp`).
+- 재학습은 `DIESEL_DATA_CSV`와 `data/uploads/*.csv`를 공통 계약으로 검증하고, 627행 이상인 후보 중 마지막 날짜가 가장 최근인 파일의 마지막 627행을 읽습니다. 날짜가 같으면 설정 CSV가 우선이며 업로드 시각은 선택 기준이 아닙니다. 행 부족·검증 실패 파일과 저장 중인 `.pending` 파일은 제외합니다. 후보가 없으면 `insufficient_data`입니다.
+- 모델 버전·판정 기간·선택된 627행의 SHA-256이 같으면 확정 결과(`promoted`, `gate_failed`)를 재사용합니다. 데이터 변경은 쿨다운 후 새로 학습합니다. 데이터 부족·학습 예외·Production 없음은 영구 캐시하지 않고 쿨다운 후 같은 판정도 재시도합니다. 동시 실행 방지는 결과 기록까지 하나의 잠금으로 보호합니다.
+- 업로드의 검증·저장·지연 정답 연결·재학습은 작업 스레드에서 실행합니다. 업로드 응답은 판정 완료까지 기다리지만 그동안 이벤트 루프는 다른 요청을 처리합니다. CSV는 저장 완료 후 원자적으로 공개합니다.
+- 운영자 기본 수신함은 `AIOPS_ALERT_FILE=logs/alerts.jsonl`이며 기존 logs 볼륨에 보관합니다. `GET /logs/alerts.jsonl`로 조회하고, 승격(`promoted`)과 실제 교체(`reloaded`, `reload_failed`)를 별도 알림으로 기록합니다. 이 알림 상태는 `DriftCheck.status` 6개 상태와 별개입니다. `AIOPS_ALERT_WEBHOOK_URL`을 지정하면 외부 채널에도 전송하며 실패 시 수신함 기록과 HTTP 결과는 유지합니다.
+- `DIESEL_DATA_SYNTHETIC=true`는 합성 검증 실행에서만 사용합니다. fine-tuning의 로그와 MLflow params에 합성 여부를 기록하며 기본은 `false`입니다. 실측·합성 데이터를 한 저장소에서 혼용하지 않습니다.
+- 새 데이터는 대시보드·`/data/upload`로 올리거나 `DIESEL_DATA_CSV`를 갱신합니다(`dc cp`).
 - 모델이 없으면 서버는 뜨고 `/predict`만 503입니다(기본 lazy). eager는 시작 시 로드 실패가 바로 드러나지만, 모델이 준비된 뒤 전환합니다.
 
 ```bash

@@ -18,7 +18,7 @@ AIOps 3/3 (#17): 드리프트 감지 → 로그·운영자 알림 → fine-tunin
        게이트 탈락·예외는 승격이 없으므로 기존 Production이 그대로 서빙된다.
 
 반복 재학습 방지
-    - 같은 판정(모델 버전 + 판정 기간)으로는 한 번만 재학습하고, 다시 들어오면 그때 결과를 재사용한다.
+    - 같은 판정(모델 버전 + 판정 기간 + 학습 입력 지문)은 한 번만 재학습하고 결과를 재사용한다.
       재사용은 확정 결과(promoted·gate_failed)만. 데이터 부족·예외 등 일시 실패는 쿨다운 뒤 다시 시도한다.
       결과 기록까지 lock 안에서 끝내므로 동시에 들어온 같은 판정도 한 번만 학습한다.
       서빙이 교체에 실패해 기록을 유지한 경우, 재사용된 promoted 결과로 서빙이 교체를 다시 시도할 수 있다.
@@ -53,7 +53,7 @@ RETRAIN_COOLDOWN_SECONDS = float(os.getenv("RETRAIN_COOLDOWN_SECONDS", "600"))
 notifier: Callable[[dict], object] | None = operator_notifier.from_env().notify
 
 _retrain_lock = threading.Lock()
-_results: dict[tuple, dict] = {}  # (모델 버전, 판정 시작일, 종료일) → 그 판정의 확정 재학습 결과
+_results: dict[tuple, dict] = {}  # (모델 버전, 판정 시작일, 종료일, 학습 입력 지문) → 확정 결과
 FINAL_STATUSES = ("promoted", "gate_failed")  # 다시 돌려도 같은 결과 → 재사용. 나머지는 일시 실패
 _last_failure_at: float | None = None  # 마지막으로 승격하지 못한 재학습의 종료 시각
 
@@ -94,7 +94,7 @@ def _fine_tune(rows: list[dict]) -> dict:
     # mlflow·tensorflow는 무거우므로 실제로 재학습할 때만 import 한다
     from serving_app.diesel_registry import fine_tune
 
-    return fine_tune(rows)
+    return fine_tune(rows, synthetic=os.getenv("DIESEL_DATA_SYNTHETIC", "false").lower() == "true")
 
 
 def _notify(public: dict, detection: dict) -> None:
@@ -128,7 +128,8 @@ def _detection_reason(detection: dict) -> str:
     return (
         f"탐지: 1주차 RMSE {detection['week1_rmse']:.2f} > 같은 기간 naive RMSE "
         f"{detection['naive_rmse']:.2f} (기준일 {detection['n']}개 {period}, "
-        f"모델 {detection['model_version'] or 'unknown'})"
+        f"모델 {detection['model_version'] or 'unknown'}, "
+        f"판정 하한 {detection.get('min_rmse', 0):.2f}원/L)"
     )
 
 

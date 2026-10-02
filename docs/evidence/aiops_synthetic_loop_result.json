@@ -1,0 +1,175 @@
+{
+  "synthetic": true,
+  "seeded_production_fixture": true,
+  "mlflow": "3.16.0",
+  "upload": {
+    "filename": "diesel_f7d28239ecf74a0bb44273eb911b4729.csv",
+    "rows": 700,
+    "filled": 0
+  },
+  "before": {
+    "predictions": [
+      {
+        "horizon_week": 1,
+        "start_date": "2015-12-03",
+        "end_date": "2015-12-09",
+        "predicted_avg_price": 3596.98
+      },
+      {
+        "horizon_week": 2,
+        "start_date": "2015-12-10",
+        "end_date": "2015-12-16",
+        "predicted_avg_price": 3596.98
+      },
+      {
+        "horizon_week": 3,
+        "start_date": "2015-12-17",
+        "end_date": "2015-12-23",
+        "predicted_avg_price": 3596.98
+      },
+      {
+        "horizon_week": 4,
+        "start_date": "2015-12-24",
+        "end_date": "2015-12-30",
+        "predicted_avg_price": 3596.98
+      }
+    ],
+    "base_date": "2015-12-02",
+    "model_version": "champion:1"
+  },
+  "drift_check": {
+    "rmse": [
+      11.915398139920548,
+      32.91532130489748,
+      53.91530426798597,
+      74.91529675672453
+    ],
+    "naive_rmse": [
+      12.0,
+      33.0,
+      54.0,
+      75.0
+    ],
+    "production_rmse": [
+      12.019999999552967,
+      33.01999999955297,
+      54.019999999552965,
+      75.01999999955297
+    ],
+    "production_before": "1",
+    "passed": true,
+    "run_id": "985bd92c03b1465bad08cb4c9b333d31",
+    "reasons": [
+      "탐지: 1주차 RMSE 12.02 > 같은 기간 naive RMSE 12.00 (기준일 28개 2015-10-08~2015-11-04, 모델 champion:1, 판정 하한 10.00원/L)"
+    ],
+    "promoted": true,
+    "version": "2",
+    "status": "promoted",
+    "drift_rmse": 12.02,
+    "drift_naive_rmse": 12.0,
+    "reload": {
+      "reloaded": true,
+      "version": "champion:2"
+    }
+  },
+  "after": {
+    "predictions": [
+      {
+        "horizon_week": 1,
+        "start_date": "2015-12-03",
+        "end_date": "2015-12-09",
+        "predicted_avg_price": 3597.08
+      },
+      {
+        "horizon_week": 2,
+        "start_date": "2015-12-10",
+        "end_date": "2015-12-16",
+        "predicted_avg_price": 3597.08
+      },
+      {
+        "horizon_week": 3,
+        "start_date": "2015-12-17",
+        "end_date": "2015-12-23",
+        "predicted_avg_price": 3597.08
+      },
+      {
+        "horizon_week": 4,
+        "start_date": "2015-12-24",
+        "end_date": "2015-12-30",
+        "predicted_avg_price": 3597.08
+      }
+    ],
+    "base_date": "2015-12-02",
+    "model_version": "champion:2"
+  },
+  "health": {
+    "status": "ok",
+    "contract_version": "diesel-weekly-v2",
+    "model_loaded": true,
+    "model_version": "champion:2",
+    "model_source": "mlflow",
+    "loading_mode": "lazy"
+  },
+  "repeat": {
+    "reasons": [],
+    "promoted": false,
+    "status": "ok",
+    "drift_rmse": 11.92,
+    "drift_naive_rmse": 12.0
+  },
+  "operator_inbox": [
+    {
+      "time": "2026-10-01T08:49:11+00:00",
+      "level": "INFO",
+      "status": "promoted",
+      "cause": "1주차 RMSE 12.02 > 같은 기간 naive RMSE 12.00 (판정 하한 10.00원/L도 초과)",
+      "week1_rmse": 12.02,
+      "threshold_naive_rmse": 12.0,
+      "threshold_min_rmse": 10.0,
+      "threshold_rmse": 12.0,
+      "model_version": "champion:1",
+      "period": [
+        "2015-10-08",
+        "2015-11-04"
+      ],
+      "new_version": "2",
+      "new_rmse": [
+        11.915398139920548,
+        32.91532130489748,
+        53.91530426798597,
+        74.91529675672453
+      ],
+      "action": "새 모델 v2 승격 (서빙 교체는 batch_test reload 결과 확인)",
+      "reload": null
+    },
+    {
+      "time": "2026-10-01T08:49:11+00:00",
+      "level": "INFO",
+      "status": "reloaded",
+      "cause": "1주차 RMSE 12.02 > 같은 기간 naive RMSE 12.00 (판정 하한 10.00원/L도 초과)",
+      "week1_rmse": 12.02,
+      "threshold_naive_rmse": 12.0,
+      "threshold_min_rmse": 10.0,
+      "threshold_rmse": 12.0,
+      "model_version": "champion:1",
+      "period": [
+        "2015-10-08",
+        "2015-11-04"
+      ],
+      "new_version": "2",
+      "new_rmse": [
+        11.915398139920548,
+        32.91532130489748,
+        53.91530426798597,
+        74.91529675672453
+      ],
+      "action": "서빙 교체 완료: champion:2",
+      "reload": {
+        "reloaded": true,
+        "version": "champion:2"
+      }
+    }
+  ],
+  "webhook_received": 2,
+  "aiops_log": "2026-10-01 08:49:09,159 [WARNING] [WARN] drift detected (week1_rmse=12.02 > naive_rmse=12.00, n=28, period=2015-10-08~2015-11-04, model=champion:1)\n2026-10-01 08:49:09,162 [INFO] [INFO] retrain data selected: data/uploads/diesel_f7d28239ecf74a0bb44273eb911b4729.csv rows=700 period=2014-03-16~2015-12-02 sha256=4ddb402bf9d856cbfa57f3faf94b481ae9785ce15105690be0182d6ed32c11c5\n2026-10-01 08:49:09,163 [INFO] [INFO] retrain triggered (rows=627, data=2014-03-16~2015-12-02)\n2026-10-01 08:49:11,823 [INFO] [OK] new_rmse=[11.92, 32.92, 53.92, 74.92] naive=[12.00, 33.00, 54.00, 75.00] - champion promoted: DieselPricePredictor v2\n2026-10-01 08:49:11,823 [WARNING] [ALERT] [AIOps INFO] promoted | 2026-10-01T08:49:11+00:00 | 원인: 1주차 RMSE 12.02 > 같은 기간 naive RMSE 12.00 (판정 하한 10.00원/L도 초과) (모델 champion:1, 기간 2015-10-08~2015-11-04) | 조치: 새 모델 v2 승격 (서빙 교체는 batch_test reload 결과 확인)\n2026-10-01 08:49:11,852 [WARNING] [ALERT] [AIOps INFO] reloaded | 2026-10-01T08:49:11+00:00 | 원인: 1주차 RMSE 12.02 > 같은 기간 naive RMSE 12.00 (판정 하한 10.00원/L도 초과) (모델 champion:1, 기간 2015-10-08~2015-11-04) | 조치: 서빙 교체 완료: champion:2\n"
+}

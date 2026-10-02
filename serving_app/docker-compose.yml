@@ -17,6 +17,7 @@ services:
       AIOPS_ALERT_TIMEOUT: ${AIOPS_ALERT_TIMEOUT:-5}
       AIOPS_ALERT_DEDUP_SECONDS: ${AIOPS_ALERT_DEDUP_SECONDS:-3600}
       RETRAIN_COOLDOWN_SECONDS: ${RETRAIN_COOLDOWN_SECONDS:-600}
+      DIESEL_DATA_SYNTHETIC: ${DIESEL_DATA_SYNTHETIC:-false}
       DIESEL_DATA_CSV: ${DIESEL_DATA_CSV:-data/processed/diesel_features_2008_spliced.csv}
     volumes:
       - uploads:/app/data/uploads

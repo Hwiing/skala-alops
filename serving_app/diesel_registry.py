@@ -202,7 +202,7 @@ def train_and_register(
     return log_and_gate(forecaster, frame, val_idx, meta, run_name="diesel-base-train")
 
 
-def fine_tune(rows: list[dict]) -> dict:
+def fine_tune(rows: list[dict], *, synthetic: bool = False) -> dict:
     """#11 드리프트 재학습. rows: 최근 데이터(하루 간격, 최소 FINETUNE_MIN_ROWS행)."""
     from data.contracts import validate_daily_rows
 
@@ -220,6 +220,7 @@ def fine_tune(rows: list[dict]) -> dict:
     info = finetune(forecaster, frame, train_idx, FINE_TUNE_EPOCHS, FINE_TUNE_LR)
     meta = {
         "mode": "fine-tune",
+        "synthetic": synthetic,
         "data": f"rows:{len(rows)}",
         "data_sha256": hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest(),
         "data_period": [frame.dates[0].isoformat(), frame.dates[-1].isoformat()],
@@ -248,7 +249,7 @@ def main():
     args = ap.parse_args()
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db"))
     if args.fine_tune:
-        print(fine_tune(load_diesel_rows(args.csv)[-FINETUNE_MIN_ROWS:]))
+        print(fine_tune(load_diesel_rows(args.csv)[-FINETUNE_MIN_ROWS:], synthetic=args.synthetic))
         return
     train_and_register(
         args.csv, args.holdout_days, [int(s) for s in args.seeds.split(",")], args.synthetic

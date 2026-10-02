@@ -145,9 +145,10 @@ def judge_and_swap() -> dict:
     """
     global _judgement_pending
     _judgement_pending = True
+    judged_pairs = recent_predictions.pairs()
     try:
         drift_check = DriftCheck.model_validate(
-            retrain_trigger.check_and_trigger(recent_predictions.pairs())
+            retrain_trigger.check_and_trigger(judged_pairs)
         ).model_dump(exclude_none=True)
     except NotImplementedError as exc:
         raise HTTPException(501, f"AIOps 판정 미구현: {exc}") from exc
@@ -162,7 +163,7 @@ def judge_and_swap() -> dict:
             DriftCheck.model_validate(drift_check)
         except ValidationError as exc:
             raise HTTPException(503, "모델 교체 결과가 공통 계약에 맞지 않습니다") from exc
-        retrain_trigger.notify_reload(drift_check, recent_predictions.pairs())
+        retrain_trigger.notify_reload(drift_check, judged_pairs)
         if not drift_check["reload"]["reloaded"]:
             return drift_check
         recent_predictions.clear()
