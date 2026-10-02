@@ -21,6 +21,7 @@ from serving_app.monitoring.prediction_window import PredictionWindow
 from serving_app.routers import data as data_router
 from serving_app.routers import predict as predict_router
 from tests.test_drift_detector import _ShiftModel
+from tests.test_retrain_trigger import PROMOTED as PROMOTED_RESULT
 from tests.test_retrain_trigger import env  # noqa: F401  가짜 fine_tune·알림 fixture
 from tests.test_scaffold import _csv, make_rows
 
@@ -170,3 +171,40 @@ def test_record_with_actual_still_updates_actual():
     assert record["predicted"] == [3.0] * 4
     assert record["actual"] == [5.0, 2.0, 7.0, None]
     assert record["source"] == "batch"
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        {"result": {"status": "no_production", "promoted": False, "reasons": ["Production 없음"]}},
+        {
+            "error": ValueError("insufficient_data: 627행 필요, 400행")
+        },  # 드리프트 뒤 재학습 데이터 부족
+    ],
+    ids=["no_production", "retrain_data_insufficient"],
+)
+def test_temporary_retrain_failure_after_drift_is_retried_on_reupload(live, monkeypatch, failure):
+    """#14 리뷰(#59 코멘트) P2: 드리프트는 감지했지만 재학습을 못 한 상태는 다음 업로드가 다시 판정한다."""
+    monkeypatch.setattr(rt, "RETRAIN_COOLDOWN_SECONDS", 0)
+    live.predict_all()
+    live.env.update(failure)
+    first = live.upload()
+    assert first["drift_check"]["status"] in ("no_production", "insufficient_data")
+    assert "drift_rmse" in first["drift_check"]
+
+    live.env.update(result={**live.env["result"], **PROMOTED_RESULT}, error=None)
+    second = live.upload()  # 같은 CSV: 새 정답은 없지만 재학습이 끝나지 않았으므로 다시 판정
+    assert second["filled"] == 0
+    assert second["drift_check"]["status"] == "promoted"
+    assert len(live.window) == 0
+
+
+def test_too_few_pairs_does_not_keep_judgement_pending(live):
+    """판정할 짝 자체가 부족하면(드리프트 판정 전 insufficient_data) 새 정답이 올 때까지 기다린다."""
+    for b in range(INPUT_DAYS - 1, INPUT_DAYS - 1 + PAIR_WINDOW - 1):  # 27개만 예측
+        assert live.predict(b).status_code == 200
+    first = live.upload()
+    assert first["drift_check"]["status"] == "insufficient_data"
+    assert "drift_rmse" not in first["drift_check"]
+
+    assert "drift_check" not in live.upload()
